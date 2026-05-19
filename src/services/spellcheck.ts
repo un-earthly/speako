@@ -1,5 +1,3 @@
-import { correctWithModel, isModelLoaded } from './local-llm';
-
 export interface SpellMatch {
   offset: number;
   length: number;
@@ -67,20 +65,6 @@ export async function checkSpelling(text: string, lang: string): Promise<SpellMa
       // fall through to model
     } finally {
       clearTimeout(timer);
-    }
-  }
-
-  // Fallback: on-device model for unsupported languages or when LT returns nothing
-  if (isModelLoaded()) {
-    const corrected = await correctWithModel(text, lang);
-    if (corrected && corrected !== text) {
-      // Surface the whole text as a single suggestion
-      return [{
-        offset: 0,
-        length: text.length,
-        word: text,
-        replacements: [corrected],
-      }];
     }
   }
 

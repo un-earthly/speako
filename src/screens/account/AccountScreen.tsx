@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,14 +6,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getLanguageByCode } from '../../constants/languages';
 import { Routes } from '../../constants/routes';
-import {
-  isModelDownloaded,
-  isModelLoaded,
-  downloadModel,
-  loadModel,
-  deleteModel,
-  MODEL_SIZE_MB,
-} from '../../services/local-llm';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -36,40 +28,6 @@ export function AccountScreen({ navigation }: any) {
   const preferredLangName = getLanguageByCode(user?.preferredLanguage || '')?.name || user?.preferredLanguage || 'Not set';
   const insets = useSafeAreaInsets();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-
-  // AI model state
-  const [modelDownloaded, setModelDownloaded] = useState(false);
-  const [modelLoaded, setModelLoaded] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [modelError, setModelError] = useState('');
-
-  useEffect(() => {
-    isModelDownloaded().then(setModelDownloaded);
-    setModelLoaded(isModelLoaded());
-  }, []);
-
-  const handleDownloadModel = async () => {
-    setDownloading(true);
-    setModelError('');
-    try {
-      await downloadModel((p) => setDownloadProgress(p));
-      setModelDownloaded(true);
-      await loadModel();
-      setModelLoaded(isModelLoaded());
-    } catch (e: any) {
-      setModelError('Download failed. Check connection and try again.');
-    } finally {
-      setDownloading(false);
-      setDownloadProgress(0);
-    }
-  };
-
-  const handleDeleteModel = async () => {
-    await deleteModel();
-    setModelDownloaded(false);
-    setModelLoaded(false);
-  };
 
   const sections: Section[] = [
     {
@@ -132,72 +90,6 @@ export function AccountScreen({ navigation }: any) {
             <Text style={[styles.profileEmail, { color: colors.textSecondary }]} numberOfLines={1}>
               {user?.email || ''}
             </Text>
-          </View>
-        </View>
-
-        {/* AI Translation Model */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ON-DEVICE SPELL CHECK</Text>
-          <View style={[styles.card, { backgroundColor: colors.card }]}>
-            <View style={styles.modelHeader}>
-              <View style={styles.modelInfo}>
-                <Text style={[styles.modelName, { color: colors.text }]}>Qwen 2.5 · 0.5B</Text>
-                <Text style={[styles.modelMeta, { color: colors.textSecondary }]}>
-                  On-device spell check · {MODEL_SIZE_MB} MB
-                </Text>
-              </View>
-              <View style={[
-                styles.modelBadge,
-                { backgroundColor: modelLoaded ? '#34C75920' : modelDownloaded ? '#007AFF20' : colors.surface },
-              ]}>
-                <Text style={[
-                  styles.modelBadgeText,
-                  { color: modelLoaded ? '#34C759' : modelDownloaded ? '#007AFF' : colors.textSecondary },
-                ]}>
-                  {modelLoaded ? 'Active' : modelDownloaded ? 'Ready' : 'Not installed'}
-                </Text>
-              </View>
-            </View>
-
-            {modelError ? (
-              <Text style={styles.modelError}>{modelError}</Text>
-            ) : null}
-
-            {downloading ? (
-              <View style={styles.progressWrap}>
-                <View style={[styles.progressTrack, { backgroundColor: colors.surface }]}>
-                  <View style={[styles.progressFill, { width: `${Math.round(downloadProgress * 100)}%` }]} />
-                </View>
-                <Text style={[styles.progressLabel, { color: colors.textSecondary }]}>
-                  {Math.round(downloadProgress * 100)}% · {Math.round(downloadProgress * MODEL_SIZE_MB)} / {MODEL_SIZE_MB} MB
-                </Text>
-              </View>
-            ) : modelDownloaded ? (
-              <View style={styles.modelActions}>
-                {!modelLoaded && (
-                  <TouchableOpacity
-                    style={[styles.modelBtn, { backgroundColor: '#007AFF' }]}
-                    onPress={async () => { await loadModel(); setModelLoaded(isModelLoaded()); }}
-                  >
-                    <Text style={styles.modelBtnText}>Load into memory</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  style={[styles.modelBtn, { backgroundColor: colors.surface }]}
-                  onPress={handleDeleteModel}
-                >
-                  <Text style={[styles.modelBtnText, { color: '#FF3B30' }]}>Remove model</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={[styles.modelBtn, { backgroundColor: '#007AFF', marginTop: 12 }]}
-                onPress={handleDownloadModel}
-              >
-                <Ionicons name="download-outline" size={15} color="#FFF" />
-                <Text style={styles.modelBtnText}>Download ({MODEL_SIZE_MB} MB)</Text>
-              </TouchableOpacity>
-            )}
           </View>
         </View>
 
@@ -349,52 +241,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '400',
   },
-  modelHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-  },
-  modelInfo: { flex: 1 },
-  modelName: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
-  modelMeta: { fontSize: 12 },
-  modelBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  modelBadgeText: { fontSize: 12, fontWeight: '600' },
-  modelError: { color: '#FF3B30', fontSize: 13, paddingHorizontal: 16, paddingBottom: 10 },
-  progressWrap: { paddingHorizontal: 16, paddingBottom: 14, gap: 6 },
-  progressTrack: {
-    height: 6,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#007AFF',
-  },
-  progressLabel: { fontSize: 12 },
-  modelActions: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-  },
-  modelBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  modelBtnText: { color: '#FFF', fontSize: 13, fontWeight: '600' },
   modalOverlay: {
     flex: 1,
     justifyContent: 'center',

@@ -52,6 +52,23 @@ export const LANGUAGES: Language[] = [
   { code: 'sl', name: 'Slovenian', nativeName: 'Slovenščina', countryCode: 'SI' },
   { code: 'sr', name: 'Serbian', nativeName: 'Српски', countryCode: 'RS' },
   { code: 'mk', name: 'Macedonian', nativeName: 'Македонски', countryCode: 'MK' },
+  { code: 'af', name: 'Afrikaans', nativeName: 'Afrikaans', countryCode: 'ZA' },
+  { code: 'cy', name: 'Welsh', nativeName: 'Cymraeg', countryCode: 'GB' },
+  { code: 'et', name: 'Estonian', nativeName: 'Eesti', countryCode: 'EE' },
+  { code: 'eu', name: 'Basque', nativeName: 'Euskara', countryCode: 'ES' },
+  { code: 'gl', name: 'Galician', nativeName: 'Galego', countryCode: 'ES' },
+  { code: 'gu', name: 'Gujarati', nativeName: 'ગુજરાતી', countryCode: 'IN' },
+  { code: 'is', name: 'Icelandic', nativeName: 'Íslenska', countryCode: 'IS' },
+  { code: 'ka', name: 'Georgian', nativeName: 'ქართული', countryCode: 'GE' },
+  { code: 'kn', name: 'Kannada', nativeName: 'ಕನ್ನಡ', countryCode: 'IN' },
+  { code: 'lo', name: 'Lao', nativeName: 'ລາວ', countryCode: 'LA' },
+  { code: 'lt', name: 'Lithuanian', nativeName: 'Lietuvių', countryCode: 'LT' },
+  { code: 'lv', name: 'Latvian', nativeName: 'Latviešu', countryCode: 'LV' },
+  { code: 'mn', name: 'Mongolian', nativeName: 'Монгол', countryCode: 'MN' },
+  { code: 'mr', name: 'Marathi', nativeName: 'मराठी', countryCode: 'IN' },
+  { code: 'mt', name: 'Maltese', nativeName: 'Malti', countryCode: 'MT' },
+  { code: 'ne', name: 'Nepali', nativeName: 'नेपाली', countryCode: 'NP' },
+  { code: 'pa', name: 'Punjabi', nativeName: 'ਪੰਜਾਬੀ', countryCode: 'IN' },
 ];
 
 export function getLanguageByCode(code: string): Language | undefined {

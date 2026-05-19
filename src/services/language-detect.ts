@@ -10,7 +10,7 @@ const SCRIPT_RANGES: ScriptRange[] = [
   { lang: 'zh', min: 0x3400, max: 0x4DBF }, // CJK Extension A
   { lang: 'ja', min: 0x3040, max: 0x30FF }, // Hiragana + Katakana
   { lang: 'ko', min: 0xAC00, max: 0xD7AF }, // Hangul syllables
-  { lang: 'hi', min: 0x0900, max: 0x097F }, // Devanagari
+  { lang: 'hi', min: 0x0900, max: 0x097F }, // Devanagari (hi/mr/ne share this range)
   { lang: 'ru', min: 0x0400, max: 0x04FF }, // Cyrillic
   { lang: 'el', min: 0x0370, max: 0x03FF }, // Greek
   { lang: 'he', min: 0x0590, max: 0x05FF }, // Hebrew
@@ -21,9 +21,16 @@ const SCRIPT_RANGES: ScriptRange[] = [
   { lang: 'si', min: 0x0D80, max: 0x0DFF }, // Sinhala
   { lang: 'my', min: 0x1000, max: 0x109F }, // Myanmar
   { lang: 'km', min: 0x1780, max: 0x17FF }, // Khmer
-  { lang: 'ur', min: 0x0600, max: 0x06FF }, // Urdu (same as Arabic script)
-  { lang: 'fa', min: 0x0600, max: 0x06FF }, // Persian (same as Arabic script)
+  { lang: 'ur', min: 0x0600, max: 0x06FF }, // Urdu (Arabic script)
+  { lang: 'fa', min: 0x0600, max: 0x06FF }, // Persian (Arabic script)
   { lang: 'uk', min: 0x0400, max: 0x04FF }, // Ukrainian (Cyrillic)
+  { lang: 'gu', min: 0x0A80, max: 0x0AFF }, // Gujarati
+  { lang: 'pa', min: 0x0A00, max: 0x0A7F }, // Punjabi (Gurmukhi)
+  { lang: 'kn', min: 0x0C80, max: 0x0CFF }, // Kannada
+  { lang: 'ka', min: 0x10A0, max: 0x10FF }, // Georgian
+  { lang: 'lo', min: 0x0E80, max: 0x0EFF }, // Lao
+  { lang: 'am', min: 0x1200, max: 0x137F }, // Ethiopic (Amharic)
+  { lang: 'hy', min: 0x0530, max: 0x058F }, // Armenian
 ];
 
 // Common word patterns for Latin-script languages
