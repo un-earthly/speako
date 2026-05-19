@@ -1,66 +1,123 @@
-# Starter Template with React Navigation
+# Unbounded
 
-This is a minimal starter template for React Native apps using Expo and React Navigation.
+A real-time translation chat app that lets two people speaking different languages have a seamless conversation. Each participant selects their language, and all messages are automatically translated as they are sent.
 
-It includes the following:
+## Features
 
-- Example [Native Stack](https://reactnavigation.org/docs/native-stack-navigator) with a nested [Bottom Tab](https://reactnavigation.org/docs/bottom-tab-navigator)
-- Web support with [React Native for Web](https://necolas.github.io/react-native-web/)
-- TypeScript support and configured for React Navigation
-- Automatic [deep link](https://reactnavigation.org/docs/deep-linking) and [URL handling configuration](https://reactnavigation.org/docs/configuring-links)
-- Theme support [based on system appearance](https://reactnavigation.org/docs/themes/#using-the-operating-system-preferences)
-- Expo [Development Build](https://docs.expo.dev/develop/development-builds/introduction/) with [Continuous Native Generation](https://docs.expo.dev/workflow/continuous-native-generation/)
+- **Real-time translated chat** — messages are stored with both the original and translated text via Firestore
+- **Voice messages** — record and play back audio messages with transcription
+- **Speech recognition** — tap-to-talk input using device speech recognition
+- **Language detection** — automatically identifies the language being spoken
+- **Auth** — email/password and Google sign-in, persistent sessions, forgot-password with OTP
+- **Account management** — edit profile, change password, view chat history, set preferred language
+- **Light/dark theme** — follows system preference with manual override
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | React Native (Expo SDK 55) |
+| Navigation | React Navigation v7 (Native Stack + Bottom Tabs) |
+| Backend | Firebase (Auth, Firestore, Storage) |
+| State | React Context + Hooks |
+| Audio | `expo-audio`, `expo-speech-recognition` |
+| Images | `expo-image-picker` |
+| Icons | `@expo/vector-icons` |
+
+## Project Structure
+
+```
+src/
+├── App.tsx                  # Root component (theme, splash, deep linking)
+├── config/firebase.ts       # Firebase initialization
+├── contexts/                # Auth, Theme, Translation contexts
+├── navigation/              # Root, Auth, and App navigators
+├── screens/
+│   ├── auth/                # Splash, Login, SignUp, ForgotPassword, OTP
+│   ├── home/                # Language selection + start conversation
+│   ├── conversation/        # Real-time chat screen
+│   └── account/             # Profile, history, settings
+├── components/
+│   ├── common/              # Button, Input, LanguagePicker, Avatar
+│   └── chat/                # MessageBubble, ChatInput, VoiceRecorder
+├── services/                # Auth, Firestore, Storage, Translation API
+├── hooks/                   # useAuth, useFirestore, useStorage
+├── constants/               # Languages list, colors, route names
+└── utils/                   # Validators, formatters
+```
+
+## Firestore Data Model
+
+```
+users/{userId}
+conversations/{conversationId}
+  └── messages/{messageId}   # originalText + translatedText per message
+translations/{translationId}
+```
 
 ## Getting Started
 
-1. Create a new project using this template:
+### Prerequisites
 
-   ```sh
-   npx create-expo-app@latest --template react-navigation/template
-   ```
+- Node.js 18+
+- Expo CLI (`npm install -g expo-cli`)
+- EAS CLI (`npm install -g eas-cli`)
+- Android Studio or Xcode for native builds
 
-2. Edit the `app.json` file to configure the `name`, `slug`, `scheme` and bundle identifiers (`ios.bundleIdentifier` and `android.bundleIdentifier`) for your app.
+### Setup
 
-3. Edit the `src/App.tsx` file to start working on your app.
+```sh
+npm install
+```
 
-## Running the app
+Create `src/config/firebase.ts` with your Firebase project credentials:
 
-- Install the dependencies:
+```ts
+import { initializeApp } from 'firebase/app';
 
-  ```sh
-  npm install
-  ```
+const firebaseConfig = {
+  apiKey: '...',
+  authDomain: '...',
+  projectId: '...',
+  storageBucket: '...',
+  messagingSenderId: '...',
+  appId: '...',
+};
 
-- Start the development server:
+export const app = initializeApp(firebaseConfig);
+```
 
-  ```sh
-  npm start
-  ```
+### Run
 
-- Build and run iOS and Android development builds:
+```sh
+# Start dev server
+npm start
 
-  ```sh
-  npm run ios
-  # or
-  npm run android
-  ```
+# Run on Android
+npm run android
 
-- In the terminal running the development server, press `i` to open the iOS simulator, `a` to open the Android device or emulator, or `w` to open the web browser.
+# Run on iOS
+npm run ios
+```
 
-## Notes
+> This project uses a development build and **cannot** be run with Expo Go.
 
-This project uses a [development build](https://docs.expo.dev/develop/development-builds/introduction/) and cannot be run with [Expo Go](https://expo.dev/go). To run the app with Expo Go, edit the `package.json` file, remove the `expo-dev-client` package and `--dev-client` flag from the `start` script.
+### Build (EAS)
 
-We highly recommend using the development builds for normal development and testing.
+```sh
+# Preview build (internal distribution)
+eas build --profile preview
 
-The `ios` and `android` folder are gitignored in the project by default as they are automatically generated during the build process ([Continuous Native Generation](https://docs.expo.dev/workflow/continuous-native-generation/)). This means that you should not edit these folders directly and use [config plugins](https://docs.expo.dev/config-plugins/) instead. However, if you need to edit these folders, you can remove them from the `.gitignore` file so that they are tracked by git.
+# Production build
+eas build --profile production
+```
 
-## Resources
+## Supported Languages
 
-- [React Navigation documentation](https://reactnavigation.org/)
-- [Expo documentation](https://docs.expo.dev/)
+English, Bengali, Arabic, Bahasa Indonesia, Chinese (Simplified), Korean, Japanese, and more — full list in `src/constants/languages.ts`.
 
----
+## Environment
 
-Demo assets are from [lucide.dev](https://lucide.dev/)
-# change
+- Bundle ID: `com.normod.unbounded`
+- Firebase project: `unbounded-4b73f`
+- EAS project: `d38bfccf-2b75-467b-889e-11a9a966a5c0`
