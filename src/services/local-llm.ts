@@ -91,62 +91,30 @@ function langName(code: string): string {
   return LANG_NAMES[code.split('-')[0]] ?? code;
 }
 
-export async function translateWithModel(
-  text: string,
-  sourceLang: string,
-  targetLang: string,
-): Promise<string | null> {
+// Returns the corrected version of the text, or null if model isn't loaded.
+// Used as a fallback spell/grammar fix for languages LanguageTool doesn't cover well.
+export async function correctWithModel(text: string, lang: string): Promise<string | null> {
   if (!ctx) return null;
-  const src = langName(sourceLang);
-  const tgt = langName(targetLang);
-
+  const name = langName(lang);
   try {
     const { text: output } = await ctx.completion({
       messages: [
         {
           role: 'system',
           content:
-            'You are a professional translator. Output only the translated text — no quotes, no explanations, no extra lines.',
+            `You are a ${name} spell and grammar checker. Fix only spelling and grammar errors in the user's text. Output only the corrected text — no explanations, no quotes, no extra lines. If the text is already correct, output it unchanged.`,
         },
-        {
-          role: 'user',
-          content: `Translate this ${src} text into ${tgt}:\n${text}`,
-        },
+        { role: 'user', content: text },
       ],
-      n_predict: 256,
-      temperature: 0.1,
-      top_p: 0.9,
+      n_predict: 128,
+      temperature: 0.0,
+      top_p: 1.0,
       stop: ['\n\n', '<|im_end|>', '<|endoftext|>'],
     });
-
-    const cleaned = output
-      .trim()
-      .replace(/^["""'']+|["""'']+$/g, '')
-      .trim();
+    const cleaned = output.trim().replace(/^["""'']+|["""'']+$/g, '').trim();
     return cleaned || null;
   } catch {
     return null;
   }
 }
 
-export async function detectLangWithModel(text: string): Promise<string | null> {
-  if (!ctx) return null;
-  try {
-    const { text: output } = await ctx.completion({
-      messages: [
-        {
-          role: 'system',
-          content:
-            'Detect the language of the text. Respond with only the ISO 639-1 two-letter code (e.g. en, fr, bn, zh). Nothing else.',
-        },
-        { role: 'user', content: text },
-      ],
-      n_predict: 6,
-      temperature: 0.0,
-    });
-    const code = output.trim().toLowerCase().replace(/[^a-z-]/g, '');
-    return /^[a-z]{2}(-[a-z]{2})?$/.test(code) ? code : null;
-  } catch {
-    return null;
-  }
-}

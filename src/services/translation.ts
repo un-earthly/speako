@@ -1,8 +1,15 @@
-import { translateWithModel } from './local-llm';
 import { detectScript } from './language-detect';
+import { getLanguageByCode } from '../constants/languages';
 
 // Optional DeepL key — set to unlock 500K chars/month free tier
 const DEEPL_API_KEY = '';
+
+// Build full locale string (e.g. 'fr-FR', 'bn-BD') from a base code.
+// MyMemory gives significantly better results with full locale pairs.
+function toLocale(code: string): string {
+  const lang = getLanguageByCode(code);
+  return lang ? `${lang.code}-${lang.countryCode}` : code;
+}
 
 // ── Individual translation backends ──────────────────────────────────────────
 
@@ -23,13 +30,19 @@ async function translateWithDeepL(text: string, src: string, tgt: string): Promi
   }
 }
 
+// src/tgt should be full locales like 'fr-FR', 'bn-BD'
 async function translateWithMyMemory(text: string, src: string, tgt: string): Promise<string | null> {
   try {
     const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${src}|${tgt}`;
     const json = await (await fetch(url)).json();
     if (json.responseStatus === 200) {
       const primary = json.responseData?.translatedText;
-      if (primary && primary !== text) return primary;
+      if (!primary || primary === text) return null;
+      // Discard if result has far more words than input — sign of acronym expansion
+      const inWords = text.trim().split(/\s+/).length;
+      const outWords = primary.trim().split(/\s+/).length;
+      if (outWords > inWords * 3 && inWords <= 2) return null;
+      return primary;
     }
     return null;
   } catch {
@@ -37,12 +50,13 @@ async function translateWithMyMemory(text: string, src: string, tgt: string): Pr
   }
 }
 
+// LibreTranslate only accepts base 2-letter codes
 async function translateWithLibre(text: string, src: string, tgt: string): Promise<string | null> {
   try {
     const res = await fetch('https://translate.argosopentech.com/translate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: text, source: src, target: tgt, format: 'text' }),
+      body: JSON.stringify({ q: text, source: src.split('-')[0], target: tgt.split('-')[0], format: 'text' }),
     });
     const json = await res.json();
     return json.translatedText || null;
@@ -51,29 +65,59 @@ async function translateWithLibre(text: string, src: string, tgt: string): Promi
   }
 }
 
-// Pivot through English for language pairs neither API handles well.
-// e.g.  fr → en → bn  is far more reliable than  fr → bn  directly.
-async function translateViaPivot(text: string, src: string, tgt: string): Promise<string | null> {
-  try {
-    const toEn =
-      (await translateWithMyMemory(text, src, 'en')) ??
-      (await translateWithLibre(text, src, 'en'));
-    if (!toEn || toEn === text) return null;
+const MYMEMORY_CHAR_LIMIT = 480;
 
-    return (
-      (await translateWithMyMemory(toEn, 'en', tgt)) ??
-      (await translateWithLibre(toEn, 'en', tgt))
-    );
-  } catch {
-    return null;
+// Split text into chunks that fit within the API character limit,
+// breaking at sentence boundaries where possible.
+function chunkText(text: string, limit: number): string[] {
+  if (text.length <= limit) return [text];
+  const chunks: string[] = [];
+  // Split on sentence-ending punctuation followed by whitespace
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  let current = '';
+  for (const sentence of sentences) {
+    if ((current + (current ? ' ' : '') + sentence).length > limit) {
+      if (current) chunks.push(current);
+      // Single sentence longer than limit — hard split on word boundary
+      if (sentence.length > limit) {
+        const words = sentence.split(' ');
+        current = '';
+        for (const word of words) {
+          const next = current ? `${current} ${word}` : word;
+          if (next.length > limit) {
+            if (current) chunks.push(current);
+            current = word;
+          } else {
+            current = next;
+          }
+        }
+      } else {
+        current = sentence;
+      }
+    } else {
+      current = current ? `${current} ${sentence}` : sentence;
+    }
   }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+async function translateChunked(
+  text: string,
+  translateFn: (chunk: string) => Promise<string | null>,
+): Promise<string | null> {
+  const chunks = chunkText(text, MYMEMORY_CHAR_LIMIT);
+  const results: string[] = [];
+  for (const chunk of chunks) {
+    const result = await translateFn(chunk);
+    if (!result) return null;
+    results.push(result);
+  }
+  return results.join(' ');
 }
 
 // ── Auto-detect source language ───────────────────────────────────────────────
 
-// Returns the best guessed language code for the text.
-// Uses fast script analysis; the on-device model refines Latin-script detection
-// when it is loaded (called separately from ConversationScreen if needed).
 export function detectSourceLanguage(text: string, fallback: string): string {
   return detectScript(text) ?? fallback;
 }
@@ -89,26 +133,24 @@ export async function translateText(
   const tgt = targetLang.split('-')[0];
   if (!text.trim() || src === tgt) return text;
 
-  // 1. On-device SLM — best quality, fully offline, no API cost
-  const local = await translateWithModel(text, src, tgt);
-  if (local && local !== text) return local;
+  const srcLocale = toLocale(src);
+  const tgtLocale = toLocale(tgt);
 
-  // 2. DeepL — highest quality API (requires free key)
+  // 1. DeepL — highest quality (requires free key), handles long text natively
   const deepl = await translateWithDeepL(text, src, tgt);
   if (deepl && deepl !== text) return deepl;
 
-  // 3. Direct MyMemory / LibreTranslate
-  const direct =
-    (await translateWithMyMemory(text, src, tgt)) ??
-    (await translateWithLibre(text, src, tgt));
-  if (direct && direct !== text) return direct;
+  // 2. MyMemory with full locale pair, chunked for the 500-char free-tier limit
+  const myMemory = await translateChunked(text, (chunk) =>
+    translateWithMyMemory(chunk, srcLocale, tgtLocale)
+  );
+  if (myMemory && myMemory !== text) return myMemory;
 
-  // 4. English-pivot — works for almost any language pair via indirect route
-  //    Only used when neither language is English, since direct would already work then.
-  if (src !== 'en' && tgt !== 'en') {
-    const pivot = await translateViaPivot(text, src, tgt);
-    if (pivot && pivot !== text) return pivot;
-  }
+  // 3. LibreTranslate fallback, also chunked
+  const libre = await translateChunked(text, (chunk) =>
+    translateWithLibre(chunk, src, tgt)
+  );
+  if (libre && libre !== text) return libre;
 
   return text;
 }

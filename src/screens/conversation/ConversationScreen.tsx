@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
   Animated,
 } from 'react-native';
-import Voice, { SpeechResultsEvent } from '@react-native-voice/voice';
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { detectScript } from '../../services/language-detect';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -85,9 +85,9 @@ export function ConversationScreen({ route, navigation }: any) {
 
   useEffect(() => { myLanguageRef.current = myLanguage; }, [myLanguage]);
 
-  useEffect(() => {
-    Voice.onSpeechResults = (e: SpeechResultsEvent) => {
-      const text = e.value?.[0] ?? '';
+  useSpeechRecognitionEvent('result', (e) => {
+    const text = e.results[0]?.transcript ?? '';
+    if (e.isFinal) {
       if (text) {
         setInputText(text);
         handleTextChange(text);
@@ -100,17 +100,17 @@ export function ConversationScreen({ route, navigation }: any) {
       }
       setIsRecording(false);
       setVoicePartial('');
-    };
-    Voice.onSpeechPartialResults = (e: SpeechResultsEvent) => {
-      setVoicePartial(e.value?.[0] ?? '');
-    };
-    Voice.onSpeechError = () => {
-      setIsRecording(false);
-      setVoicePartial('');
-    };
-    Voice.onSpeechEnd = () => { /* results arrive via onSpeechResults */ };
-    return () => { Voice.destroy().then(Voice.removeAllListeners); };
-  }, []);
+    } else {
+      setVoicePartial(text);
+    }
+  });
+
+  useSpeechRecognitionEvent('error', () => {
+    pulseLoop.current?.stop();
+    pulseAnim.setValue(1);
+    setIsRecording(false);
+    setVoicePartial('');
+  });
 
   const startRecording = async () => {
     try {
@@ -125,7 +125,7 @@ export function ConversationScreen({ route, navigation }: any) {
       pulseLoop.current.start();
       const lang = getLanguageByCode(myLanguageRef.current);
       const locale = lang ? `${lang.code}-${lang.countryCode}` : 'en-US';
-      await Voice.start(locale);
+      await ExpoSpeechRecognitionModule.start({ lang: locale, interimResults: true });
     } catch {
       pulseLoop.current?.stop();
       pulseAnim.setValue(1);
@@ -138,7 +138,7 @@ export function ConversationScreen({ route, navigation }: any) {
     pulseAnim.setValue(1);
     setIsRecording(false);
     setVoicePartial('');
-    try { await Voice.stop(); } catch { /* ignore */ }
+    try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
   };
 
   const handleTextChange = (text: string) => {
@@ -354,13 +354,15 @@ export function ConversationScreen({ route, navigation }: any) {
         {/* Translation preview strip */}
         {(translationPreview || isPreviewLoading) && conversation?.status === 'active' && (
           <View style={[styles.previewStrip, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-            <FlagEmoji countryCode={otherLang?.countryCode ?? 'US'} size={13} />
+            <FlagEmoji countryCode={otherLang?.countryCode ?? 'US'} size={13} style={{ alignSelf: 'flex-start', marginTop: 2 }} />
             {isPreviewLoading ? (
               <ActivityIndicator size="small" color={colors.textSecondary} style={{ marginLeft: 6 }} />
             ) : (
-              <Text style={[styles.previewText, { color: colors.textSecondary }]} numberOfLines={2}>
-                {translationPreview}
-              </Text>
+              <ScrollView style={styles.previewScroll} showsVerticalScrollIndicator={false}>
+                <Text style={[styles.previewText, { color: colors.textSecondary }]}>
+                  {translationPreview}
+                </Text>
+              </ScrollView>
             )}
           </View>
         )}
@@ -614,14 +616,17 @@ const styles = StyleSheet.create({
   },
   previewStrip: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
+    maxHeight: 120,
+  },
+  previewScroll: {
+    flex: 1,
   },
   previewText: {
-    flex: 1,
     fontSize: 13,
     fontStyle: 'italic',
     lineHeight: 18,

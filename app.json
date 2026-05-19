@@ -33,7 +33,7 @@
       ],
       "expo-web-browser",
       [
-        "@react-native-voice/voice",
+        "expo-speech-recognition",
         {
           "microphonePermission": "Allow unbounded to access your microphone for voice messages",
           "speechRecognitionPermission": "Allow unbounded to use speech recognition to transcribe your voice"
