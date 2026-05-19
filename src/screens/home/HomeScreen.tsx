@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { FlagEmoji } from '../../components/common/FlagEmoji';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { LanguagePickerModal } from '../../components/common/LanguagePickerModal';
 import { getLanguageByCode, type Language } from '../../constants/languages';
 import { Routes } from '../../constants/routes';
@@ -21,6 +22,10 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export function HomeScreen({ navigation }: any) {
   const { user, updateUserProfile } = useAuth();
+  const { theme, colors } = useTheme();
+  const isDark = theme === 'dark';
+  const iconColor = isDark ? '#FFFFFF' : '#1a1a1a';
+  const iconColorMuted = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.45)';
   const [myLanguage, setMyLanguage] = useState(user?.preferredLanguage || '');
   const [theirLanguage, setTheirLanguage] = useState(user?.lastTheirLanguage || '');
   const [showMyLangPicker, setShowMyLangPicker] = useState(false);
@@ -77,7 +82,7 @@ export function HomeScreen({ navigation }: any) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Full-screen background map */}
       <Image
         source={require('../../../assets/home.png')}
@@ -85,8 +90,8 @@ export function HomeScreen({ navigation }: any) {
         resizeMode="cover"
       />
 
-      {/* Dark overlay so UI stays readable */}
-      <View style={styles.overlay} />
+      {/* Overlay — dark in dark mode, light-white in light mode */}
+      <View style={[styles.overlay, { backgroundColor: theme === 'dark' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.72)' }]} />
 
       {/* Header — top 30% of screen */}
       <View style={[styles.headerArea, { height: SCREEN_HEIGHT * 0.30, paddingTop: insets.top + 8 }]}>
@@ -96,16 +101,16 @@ export function HomeScreen({ navigation }: any) {
             style={styles.avatar}
             onPress={() => navigation.navigate(Routes.Account)}
           >
-            <Ionicons name="person" size={20} color="#FFFFFF" />
+            <Ionicons name="person" size={20} color={iconColor} />
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Glassmorphism language card */}
       <View style={styles.cardWrap}>
-        <View style={styles.glassCard}>
+        <View style={[styles.glassCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)' }]}>
           {/* My language */}
-          <Text style={styles.cardLabel}>Select Your Language</Text>
+          <Text style={[styles.cardLabel, { color: colors.text }]}>Select Your Language</Text>
           <TouchableOpacity
             style={styles.pickerRow}
             onPress={() => setShowMyLangPicker(true)}
@@ -115,26 +120,26 @@ export function HomeScreen({ navigation }: any) {
               <FlagEmoji countryCode={myLang.countryCode} size={20} />
             ) : (
               <View style={styles.sparkleBox}>
-                <Ionicons name="sparkles" size={14} color="#FFFFFF" />
+                <Ionicons name="sparkles" size={14} color={iconColor} />
               </View>
             )}
-            <Text style={[styles.pickerText, !myLang && styles.pickerPlaceholder]}>
+            <Text style={[styles.pickerText, { color: colors.text }, !myLang && { color: colors.textSecondary }]}>
               {myLang ? myLang.name : 'Select Language'}
             </Text>
-            <Ionicons name="chevron-down" size={15} color="rgba(255,255,255,0.7)" />
+            <Ionicons name="chevron-down" size={15} color={iconColorMuted} />
           </TouchableOpacity>
 
           {/* Swap — line runs full width, button masks the centre */}
           <View style={styles.swapRow}>
-            <View style={styles.swapLine} />
+            <View style={[styles.swapLine, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }]} />
             <TouchableOpacity style={styles.swapBtn} onPress={swapLanguages} activeOpacity={0.7}>
-              <Ionicons name="swap-vertical" size={15} color="rgba(255,255,255,0.9)" />
+              <Ionicons name="swap-vertical" size={15} color={iconColor} />
             </TouchableOpacity>
-            <View style={styles.swapLine} />
+            <View style={[styles.swapLine, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }]} />
           </View>
 
           {/* Their language */}
-          <Text style={styles.cardLabel}>Select Next Person's Language</Text>
+          <Text style={[styles.cardLabel, { color: colors.text }]}>Select Next Person's Language</Text>
           <TouchableOpacity
             style={styles.pickerRow}
             onPress={() => setShowTheirLangPicker(true)}
@@ -144,13 +149,13 @@ export function HomeScreen({ navigation }: any) {
               <FlagEmoji countryCode={theirLang.countryCode} size={20} />
             ) : (
               <View style={styles.sparkleBox}>
-                <Ionicons name="sparkles" size={14} color="#FFFFFF" />
+                <Ionicons name="sparkles" size={14} color={iconColor} />
               </View>
             )}
-            <Text style={[styles.pickerText, !theirLang && styles.pickerPlaceholder]}>
+            <Text style={[styles.pickerText, { color: colors.text }, !theirLang && { color: colors.textSecondary }]}>
               {theirLang ? theirLang.name : 'Select Language'}
             </Text>
-            <Ionicons name="chevron-down" size={15} color="rgba(255,255,255,0.7)" />
+            <Ionicons name="chevron-down" size={15} color={iconColorMuted} />
           </TouchableOpacity>
         </View>
       </View>
@@ -197,7 +202,7 @@ export function HomeScreen({ navigation }: any) {
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => setShowActions(false)} style={styles.cancelBtn}>
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={[styles.cancelText, { color: iconColorMuted }]}>Cancel</Text>
             </TouchableOpacity>
           </>
         )}
@@ -206,7 +211,7 @@ export function HomeScreen({ navigation }: any) {
       {/* Recent conversations */}
       {recentConvos.length > 0 && (
         <View style={styles.recentSection}>
-          <Text style={styles.recentLabel}>Recent</Text>
+          <Text style={[styles.recentLabel, { color: colors.text }]}>Recent</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recentList}>
             {recentConvos.map((convo) => {
               const otherUid = convo.participants.find((p) => p !== user?.uid);
@@ -229,7 +234,7 @@ export function HomeScreen({ navigation }: any) {
                   }
                 >
                   <FlagEmoji countryCode={myL?.countryCode ?? 'US'} size={15} />
-                  <Ionicons name={isWaiting ? 'time-outline' : 'arrow-forward'} size={11} color="rgba(255,255,255,0.7)" />
+                  <Ionicons name={isWaiting ? 'time-outline' : 'arrow-forward'} size={11} color={iconColorMuted} />
                   <FlagEmoji countryCode={otherL?.countryCode ?? 'US'} size={15} />
                 </TouchableOpacity>
               );
@@ -273,7 +278,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.35)',
   },
 
   /* ── Header ── */
@@ -303,7 +307,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   glassCard: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 20,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.25)',
@@ -313,11 +316,9 @@ const styles = StyleSheet.create({
   cardLabel: {
     fontSize: 11,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.7)',
     textAlign: 'center',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-
   },
   pickerRow: {
     flexDirection: 'row',
@@ -342,7 +343,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '600',
-    color: '#FFFFFF',
   },
   pickerPlaceholder: {
     opacity: 0.5,

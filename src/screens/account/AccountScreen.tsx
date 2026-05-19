@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { getLanguageByCode } from '../../constants/languages';
 import { Routes } from '../../constants/routes';
 import {
   isModelDownloaded,
@@ -31,7 +32,8 @@ interface Section {
 
 export function AccountScreen({ navigation }: any) {
   const { user, logout } = useAuth();
-  const { colors } = useTheme();
+  const { theme, colors } = useTheme();
+  const preferredLangName = getLanguageByCode(user?.preferredLanguage || '')?.name || user?.preferredLanguage || 'Not set';
   const insets = useSafeAreaInsets();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
@@ -85,8 +87,8 @@ export function AccountScreen({ navigation }: any) {
     {
       title: 'APPLICATION SETTING',
       items: [
-        { label: 'Preferred Language', iconName: 'language-outline', value: user?.preferredLanguage || 'English', screen: Routes.ChangeLanguage },
-        { label: 'Theme', iconName: 'sunny-outline', value: 'Light', screen: Routes.ChangeTheme },
+        { label: 'Preferred Language', iconName: 'language-outline', value: preferredLangName, screen: Routes.ChangeLanguage },
+        { label: 'Theme', iconName: 'sunny-outline', value: theme === 'dark' ? 'Dark' : 'Light', screen: Routes.ChangeTheme },
       ],
     },
     {
@@ -135,13 +137,13 @@ export function AccountScreen({ navigation }: any) {
 
         {/* AI Translation Model */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>AI TRANSLATION</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ON-DEVICE SPELL CHECK</Text>
           <View style={[styles.card, { backgroundColor: colors.card }]}>
             <View style={styles.modelHeader}>
               <View style={styles.modelInfo}>
                 <Text style={[styles.modelName, { color: colors.text }]}>Qwen 2.5 · 0.5B</Text>
                 <Text style={[styles.modelMeta, { color: colors.textSecondary }]}>
-                  On-device · {MODEL_SIZE_MB} MB · No API cost
+                  On-device spell check · {MODEL_SIZE_MB} MB
                 </Text>
               </View>
               <View style={[

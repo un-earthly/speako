@@ -18,14 +18,14 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemTheme = useColorScheme();
-  const [theme, setThemeState] = useState<ThemeMode>('light');
+  const [theme, setThemeState] = useState<ThemeMode>(systemTheme === 'dark' ? 'dark' : 'light');
 
   useEffect(() => {
     AsyncStorage.getItem(THEME_STORAGE_KEY).then((stored) => {
       if (stored === 'light' || stored === 'dark') {
         setThemeState(stored);
-      } else if (systemTheme === 'light' || systemTheme === 'dark') {
-        setThemeState(systemTheme);
+      } else {
+        setThemeState(systemTheme === 'dark' ? 'dark' : 'light');
       }
     });
   }, [systemTheme]);
