@@ -28,7 +28,7 @@
         <key>CFBundleURLSchemes</key>
         <array>
           <string>unbounded</string>
-          <string>com.unbounded</string>
+          <string>com.normod.unbounded</string>
         </array>
       </dict>
       <dict>
@@ -60,9 +60,11 @@
     <key>NSLocalNetworkUsageDescription</key>
     <string>Expo Dev Launcher uses the local network to discover and connect to development servers running on your computer.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your microphone</string>
+    <string>Allow unbounded to access your microphone for voice messages</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your photos</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Allow unbounded to use speech recognition to transcribe your voice</string>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
     <key>UIRequiredDeviceCapabilities</key>

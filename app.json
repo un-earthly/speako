@@ -10,17 +10,22 @@
     "scheme": "unbounded",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.unbounded"
+      "bundleIdentifier": "com.normod.unbounded"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.unbounded"
+      "package": "com.normod.unbounded"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d38bfccf-2b75-467b-889e-11a9a966a5c0"
+      }
     },
     "plugins": [
       "expo-asset",

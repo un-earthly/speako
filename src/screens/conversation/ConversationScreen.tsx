@@ -125,7 +125,7 @@ export function ConversationScreen({ route, navigation }: any) {
       pulseLoop.current.start();
       const lang = getLanguageByCode(myLanguageRef.current);
       const locale = lang ? `${lang.code}-${lang.countryCode}` : 'en-US';
-      await ExpoSpeechRecognitionModule.start({ lang: locale, interimResults: true });
+      ExpoSpeechRecognitionModule.start({ lang: locale, interimResults: true });
     } catch {
       pulseLoop.current?.stop();
       pulseAnim.setValue(1);
@@ -354,7 +354,9 @@ export function ConversationScreen({ route, navigation }: any) {
         {/* Translation preview strip */}
         {(translationPreview || isPreviewLoading) && conversation?.status === 'active' && (
           <View style={[styles.previewStrip, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-            <FlagEmoji countryCode={otherLang?.countryCode ?? 'US'} size={13} style={{ alignSelf: 'flex-start', marginTop: 2 }} />
+            <View style={{ alignSelf: 'flex-start', marginTop: 2 }}>
+              <FlagEmoji countryCode={otherLang?.countryCode ?? 'US'} size={13} />
+            </View>
             {isPreviewLoading ? (
               <ActivityIndicator size="small" color={colors.textSecondary} style={{ marginLeft: 6 }} />
             ) : (

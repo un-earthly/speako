@@ -308,7 +308,7 @@ fi
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.unbounded";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.normod.unbounded";
 				PRODUCT_NAME = "unbounded";
 				SWIFT_OBJC_BRIDGING_HEADER = "unbounded/unbounded-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -337,7 +337,7 @@ fi
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.unbounded";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.normod.unbounded";
 				PRODUCT_NAME = "unbounded";
 				SWIFT_OBJC_BRIDGING_HEADER = "unbounded/unbounded-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;

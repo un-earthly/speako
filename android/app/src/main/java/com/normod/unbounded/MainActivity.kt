@@ -1,4 +1,4 @@
-package com.unbounded
+package com.normod.unbounded
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
