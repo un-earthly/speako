@@ -34,6 +34,23 @@ import { checkSpelling, applyCorrection, type SpellMatch } from '../../services/
 import { sendPushNotification } from '../../services/notifications';
 import { Routes } from '../../constants/routes';
 
+function WordHighlight({ text, baseStyle }: { text: string; baseStyle: any }) {
+  const words = text.trim().split(/(\s+)/);
+  if (words.length < 2) {
+    return <Text style={[baseStyle, { color: '#007AFF', fontWeight: '700' }]}>{text}</Text>;
+  }
+  let lastIdx = words.length - 1;
+  while (lastIdx > 0 && !words[lastIdx].trim()) lastIdx--;
+  const stable = words.slice(0, lastIdx).join('');
+  const latest = words.slice(lastIdx).join('');
+  return (
+    <Text style={baseStyle}>
+      {stable}
+      <Text style={{ color: '#007AFF', fontWeight: '700' }}>{latest}</Text>
+    </Text>
+  );
+}
+
 export function ConversationScreen({ route, navigation }: any) {
   const { conversationId } = route.params || {};
   const { user } = useAuth();
@@ -105,6 +122,12 @@ export function ConversationScreen({ route, navigation }: any) {
     }
   });
 
+  useSpeechRecognitionEvent('volumechange', (e) => {
+    const vol = e.value;
+    const scale = vol < 0 ? 1 : 1 + Math.min(vol / 10, 1) * 0.45;
+    Animated.timing(pulseAnim, { toValue: scale, duration: 80, useNativeDriver: true }).start();
+  });
+
   useSpeechRecognitionEvent('error', () => {
     pulseLoop.current?.stop();
     pulseAnim.setValue(1);
@@ -118,16 +141,13 @@ export function ConversationScreen({ route, navigation }: any) {
       if (!granted) return;
       setVoicePartial('');
       setIsRecording(true);
-      pulseLoop.current = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.4, duration: 600, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-        ])
-      );
-      pulseLoop.current.start();
       const lang = getLanguageByCode(myLanguageRef.current);
       const locale = lang ? `${lang.code}-${lang.countryCode}` : 'en-US';
-      ExpoSpeechRecognitionModule.start({ lang: locale, interimResults: true });
+      ExpoSpeechRecognitionModule.start({
+        lang: locale,
+        interimResults: true,
+        volumeChangeEventOptions: { enabled: true, intervalMillis: 100 },
+      });
     } catch {
       pulseLoop.current?.stop();
       pulseAnim.setValue(1);
@@ -421,12 +441,16 @@ export function ConversationScreen({ route, navigation }: any) {
               activeOpacity={0.85}
             >
               <Animated.View style={[styles.recordingDot, { transform: [{ scale: pulseAnim }] }]} />
-              <Text
-                style={[styles.recordingText, { color: voicePartial ? colors.text : colors.textSecondary }]}
-                numberOfLines={2}
-              >
-                {voicePartial || 'Listening...'}
-              </Text>
+              {voicePartial ? (
+                <WordHighlight
+                  text={voicePartial}
+                  baseStyle={[styles.recordingText, { color: colors.text }]}
+                />
+              ) : (
+                <Text style={[styles.recordingText, { color: colors.textSecondary }]} numberOfLines={2}>
+                  Listening...
+                </Text>
+              )}
             </TouchableOpacity>
           ) : (
             <View style={[styles.inputWrapper, { backgroundColor: colors.inputBackground }]}>

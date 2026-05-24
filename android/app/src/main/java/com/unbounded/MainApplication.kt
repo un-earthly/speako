@@ -1,4 +1,4 @@
-package com.normod.unbounded
+package com.unbounded
 
 import android.app.Application
 import android.content.res.Configuration

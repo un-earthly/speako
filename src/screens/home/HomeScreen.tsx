@@ -16,7 +16,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { LanguagePickerModal } from '../../components/common/LanguagePickerModal';
 import { getLanguageByCode, type Language } from '../../constants/languages';
 import { Routes } from '../../constants/routes';
-import { createConversation, subscribeToConversations, type Conversation } from '../../services/firestore';
+import { createConversation, createFaceToFaceConversation, subscribeToConversations, type Conversation } from '../../services/firestore';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -58,13 +58,27 @@ export function HomeScreen({ navigation }: any) {
     (lang: Language) => {
       setTheirLanguage(lang.code);
       updateUserProfile({ lastTheirLanguage: lang.code }).catch(() => { });
+      navigation.navigate('VoiceVerification', { languageCode: lang.code, onVerified: () => { } });
     },
-    [updateUserProfile],
+    [navigation, updateUserProfile],
   );
 
   const swapLanguages = () => {
     setMyLanguage(theirLanguage);
     setTheirLanguage(myLanguage);
+  };
+
+  const startFaceToFace = async () => {
+    if (!user || !myLanguage || !theirLanguage) return;
+    setStarting(true);
+    try {
+      const conversationId = await createFaceToFaceConversation(user.uid, myLanguage, theirLanguage);
+      navigation.navigate(Routes.FaceToFace, { conversationId, langA: myLanguage, langB: theirLanguage });
+    } catch (err) {
+      console.error('Failed to create face-to-face conversation:', err);
+    } finally {
+      setStarting(false);
+    }
   };
 
   const startNewConversation = async () => {
@@ -184,6 +198,19 @@ export function HomeScreen({ navigation }: any) {
             </TouchableOpacity>
 
             <TouchableOpacity
+              style={[
+                styles.talkTogetherBtn,
+                (!myLanguage || !theirLanguage || starting) && styles.startBtnDisabled,
+              ]}
+              onPress={startFaceToFace}
+              activeOpacity={0.85}
+              disabled={!myLanguage || !theirLanguage || starting}
+            >
+              <Ionicons name="people" size={18} color="#FFFFFF" />
+              <Text style={styles.startBtnText}>Talk Together</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={styles.secondaryBtn}
               onPress={() => navigation.navigate(Routes.FindPerson)}
               activeOpacity={0.85}
@@ -223,18 +250,34 @@ export function HomeScreen({ navigation }: any) {
               return (
                 <TouchableOpacity
                   key={convo.id}
-                  style={[styles.recentChip, isWaiting && styles.recentChipWaiting]}
-                  onPress={() =>
-                    navigation.navigate(
-                      isWaiting ? Routes.Waiting : Routes.Conversation,
-                      isWaiting
-                        ? { conversationId: convo.id, inviteCode: convo.inviteCode, myLanguage: myLangCode }
-                        : { conversationId: convo.id },
-                    )
-                  }
+                  style={[
+                    styles.recentChip,
+                    isWaiting && styles.recentChipWaiting,
+                    convo.mode === 'faceToFace' && styles.recentChipFaceToFace,
+                  ]}
+                  onPress={() => {
+                    if (convo.mode === 'faceToFace') {
+                      navigation.navigate(Routes.FaceToFace, {
+                        conversationId: convo.id,
+                        langA: myLangCode,
+                        langB: otherLangCode,
+                      });
+                    } else {
+                      navigation.navigate(
+                        isWaiting ? Routes.Waiting : Routes.Conversation,
+                        isWaiting
+                          ? { conversationId: convo.id, inviteCode: convo.inviteCode, myLanguage: myLangCode }
+                          : { conversationId: convo.id },
+                      );
+                    }
+                  }}
                 >
                   <FlagEmoji countryCode={myL?.countryCode ?? 'US'} size={15} />
-                  <Ionicons name={isWaiting ? 'time-outline' : 'arrow-forward'} size={11} color={iconColorMuted} />
+                  <Ionicons
+                    name={convo.mode === 'faceToFace' ? 'people' : isWaiting ? 'time-outline' : 'arrow-forward'}
+                    size={11}
+                    color={iconColorMuted}
+                  />
                   <FlagEmoji countryCode={otherL?.countryCode ?? 'US'} size={15} />
                 </TouchableOpacity>
               );
@@ -396,6 +439,21 @@ const styles = StyleSheet.create({
   startBtnDisabled: { opacity: 0.7 },
   startBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 
+  talkTogetherBtn: {
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#34C759',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '84%',
+    gap: 8,
+    shadowColor: '#34C759',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    elevation: 6,
+  },
   secondaryBtn: {
     height: 46,
     borderRadius: 23,
@@ -447,6 +505,10 @@ const styles = StyleSheet.create({
   recentChipWaiting: {
     borderColor: 'rgba(255,165,0,0.5)',
     backgroundColor: 'rgba(255,165,0,0.15)',
+  },
+  recentChipFaceToFace: {
+    borderColor: 'rgba(52,199,89,0.5)',
+    backgroundColor: 'rgba(52,199,89,0.15)',
   },
 
   /* ── Ad banner ── */

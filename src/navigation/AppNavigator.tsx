@@ -4,6 +4,7 @@ import { TabNavigator } from './TabNavigator';
 import { Routes } from '../constants/routes';
 import { VoiceVerificationScreen } from '../screens/home/VoiceVerificationScreen';
 import { ConversationScreen } from '../screens/conversation/ConversationScreen';
+import { FaceToFaceScreen } from '../screens/conversation/FaceToFaceScreen';
 import { WaitingScreen } from '../screens/conversation/WaitingScreen';
 import { JoinScreen } from '../screens/conversation/JoinScreen';
 import { FindPersonScreen } from '../screens/home/FindPersonScreen';
@@ -30,6 +31,7 @@ export function AppNavigator() {
       <Stack.Screen name={Routes.Join} component={JoinScreen} />
       <Stack.Screen name={Routes.FindPerson} component={FindPersonScreen} />
       <Stack.Screen name={Routes.Conversation} component={ConversationScreen} />
+      <Stack.Screen name={Routes.FaceToFace} component={FaceToFaceScreen} />
       <Stack.Screen name={Routes.PersonalInfo} component={PersonalInfoScreen} />
       <Stack.Screen name={Routes.ChangePassword} component={ChangePasswordScreen} />
       <Stack.Screen name={Routes.ChangeLanguage} component={ChangeLanguageScreen} />

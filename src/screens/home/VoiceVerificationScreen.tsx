@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,13 +9,7 @@ import {
   Dimensions,
   ScrollView,
 } from 'react-native';
-import {
-  useAudioRecorder,
-  useAudioRecorderState,
-  requestRecordingPermissionsAsync,
-  setAudioModeAsync,
-  RecordingPresets,
-} from 'expo-audio';
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { FlagEmoji } from '../../components/common/FlagEmoji';
@@ -26,6 +20,9 @@ import { getTestPhrase } from '../../constants/phrases';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.78;
 
+// Per-bar height multipliers for a natural look
+const BAR_MULTIPLIERS = [0.55, 0.85, 1.0, 0.80, 0.50];
+
 export function VoiceVerificationScreen({ route, navigation }: any) {
   const { languageCode, onVerified } = route.params || {};
   const { colors } = useTheme();
@@ -33,99 +30,91 @@ export function VoiceVerificationScreen({ route, navigation }: any) {
   const lang = getLanguageByCode(languageCode);
   const phrase = getTestPhrase(languageCode);
 
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recordState = useAudioRecorderState(recorder, 100);
-
+  const [isRecording, setIsRecording] = useState(false);
   const [hasRecorded, setHasRecorded] = useState(false);
-  const [permissionGranted, setPermissionGranted] = useState(false);
 
   const glowAnim = useRef(new Animated.Value(1)).current;
-  const waveAnims = useRef(
-    Array.from({ length: 5 }, (_, i) => new Animated.Value(4 + i))
-  ).current;
+  const waveAnims = useRef(BAR_MULTIPLIERS.map(() => new Animated.Value(4))).current;
 
-  useEffect(() => {
-    setupAudio();
-  }, []);
-
-  useEffect(() => {
-    if (recordState.isRecording) {
-      startGlowAnimation();
-      startWaveAnimation();
-    } else {
-      glowAnim.stopAnimation();
-      glowAnim.setValue(1);
-      waveAnims.forEach((a) => { a.stopAnimation(); a.setValue(4); });
-    }
-  }, [recordState.isRecording]);
-
-  const setupAudio = async () => {
-    try {
-      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-      const { granted } = await requestRecordingPermissionsAsync();
-      setPermissionGranted(granted);
-      if (!granted) Alert.alert('Permission needed', 'Please allow microphone access to record.');
-    } catch (err) {
-      console.error('Audio setup failed:', err);
-    }
+  const resetWave = () => {
+    glowAnim.setValue(1);
+    waveAnims.forEach((a) =>
+      Animated.timing(a, { toValue: 4, duration: 200, useNativeDriver: false }).start()
+    );
   };
 
-  const startGlowAnimation = () => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1.35, duration: 700, useNativeDriver: true }),
-        Animated.timing(glowAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
-      ])
-    ).start();
-  };
+  useSpeechRecognitionEvent('volumechange', (e) => {
+    const vol = Math.max(0, Math.min(e.value, 10));
+    const normalized = vol / 10;
 
-  const startWaveAnimation = () => {
+    Animated.timing(glowAnim, {
+      toValue: 1 + normalized * 0.4,
+      duration: 80,
+      useNativeDriver: true,
+    }).start();
+
     waveAnims.forEach((anim, i) => {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(anim, { toValue: 18 + i * 3, duration: 350 + i * 80, useNativeDriver: false }),
-          Animated.timing(anim, { toValue: 5 + i * 2, duration: 350 + i * 80, useNativeDriver: false }),
-        ])
-      ).start();
+      Animated.timing(anim, {
+        toValue: 4 + normalized * 28 * BAR_MULTIPLIERS[i],
+        duration: 80,
+        useNativeDriver: false,
+      }).start();
     });
-  };
+  });
+
+  useSpeechRecognitionEvent('result', (e) => {
+    const text = e.results[0]?.transcript ?? '';
+    console.log(`[VoiceVerification] ${e.isFinal ? 'FINAL' : 'partial'}:`, JSON.stringify(text));
+    if (e.isFinal) {
+      setHasRecorded(true);
+      setIsRecording(false);
+      resetWave();
+    }
+  });
+
+  useSpeechRecognitionEvent('error', (e) => {
+    console.log('[VoiceVerification] STT error:', e.error, e.message);
+    setIsRecording(false);
+    resetWave();
+  });
 
   const handleMicPress = async () => {
-    if (!permissionGranted) {
+    if (isRecording) {
+      ExpoSpeechRecognitionModule.stop();
+      setIsRecording(false);
+      resetWave();
+      return;
+    }
+    const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!granted) {
       Alert.alert('Permission needed', 'Please allow microphone access in settings.');
       return;
     }
-    if (recordState.isRecording) {
-      recorder.stop();
-      setHasRecorded(true);
-    } else {
-      try {
-        await recorder.prepareToRecordAsync();
-        recorder.record();
-      } catch (err) {
-        console.error('Failed to start recording:', err);
-      }
-    }
+    const locale = lang ? `${lang.code}-${lang.countryCode}` : 'en-US';
+    console.log('[VoiceVerification] Starting STT for locale:', locale);
+    setIsRecording(true);
+    ExpoSpeechRecognitionModule.start({
+      lang: locale,
+      interimResults: true,
+      volumeChangeEventOptions: { enabled: true, intervalMillis: 80 },
+    });
   };
 
   const handleContinue = () => {
+    if (isRecording) {
+      ExpoSpeechRecognitionModule.stop();
+    }
     if (onVerified) onVerified();
     navigation.goBack();
   };
 
-  const isRecording = recordState.isRecording;
-
   return (
     <View style={styles.overlay}>
-      {/* Tappable backdrop */}
       <TouchableOpacity style={styles.backdrop} onPress={handleContinue} activeOpacity={1} />
 
-      {/* Bottom sheet */}
       <View style={[styles.sheet, { backgroundColor: colors.background, paddingBottom: insets.bottom + 16 }]}>
-        {/* Title */}
         <Text style={[styles.sheetTitle, { color: colors.textSecondary }]}>Select Your language</Text>
 
-        {/* Language row */}
         <TouchableOpacity
           style={[styles.langRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
           onPress={handleContinue}
@@ -145,7 +134,6 @@ export function VoiceVerificationScreen({ route, navigation }: any) {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
           <Text style={[styles.asSelected, { color: colors.text }]}>As You have Selected</Text>
 
-          {/* Large flag */}
           {lang && (
             <View style={styles.bigFlagWrap}>
               <FlagEmoji countryCode={lang.countryCode} size={48} />
@@ -164,7 +152,6 @@ export function VoiceVerificationScreen({ route, navigation }: any) {
             {phrase ? `"${phrase}"` : ''}
           </Text>
 
-          {/* Mic button with glow */}
           <View style={styles.micContainer}>
             <Animated.View
               style={[
@@ -176,10 +163,7 @@ export function VoiceVerificationScreen({ route, navigation }: any) {
               {isRecording ? (
                 <View style={styles.waveContainer}>
                   {waveAnims.map((anim, i) => (
-                    <Animated.View
-                      key={i}
-                      style={[styles.waveBar, { height: anim }]}
-                    />
+                    <Animated.View key={i} style={[styles.waveBar, { height: anim }]} />
                   ))}
                 </View>
               ) : (
@@ -188,7 +172,6 @@ export function VoiceVerificationScreen({ route, navigation }: any) {
             </TouchableOpacity>
           </View>
 
-          {/* Skip / Continue */}
           <TouchableOpacity onPress={handleContinue} style={styles.skipBtn}>
             <Text style={[styles.skipText, { color: hasRecorded ? '#007AFF' : colors.textSecondary }]}>
               {hasRecorded ? 'Continue' : 'Skip for now'}
@@ -207,7 +190,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
   sheet: {
@@ -223,7 +206,6 @@ const styles = StyleSheet.create({
     elevation: 20,
   },
   sheetTitle: { fontSize: 14, textAlign: 'center', marginBottom: 12 },
-
   langRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -243,22 +225,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   langRowText: { flex: 1, fontSize: 16, fontWeight: '500' },
-
   content: { alignItems: 'center', paddingTop: 16, paddingBottom: 8 },
-
   asSelected: { fontSize: 15, fontWeight: '500', marginBottom: 12 },
-
   bigFlagWrap: { marginBottom: 8 },
-
   langQuote: { fontSize: 22, fontWeight: '700', marginBottom: 16 },
-
   instruction: {
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 20,
   },
-
   phraseText: {
     fontSize: 22,
     fontWeight: '700',
@@ -266,7 +242,6 @@ const styles = StyleSheet.create({
     lineHeight: 34,
     marginBottom: 28,
   },
-
   micContainer: {
     width: 100,
     height: 100,
@@ -294,7 +269,6 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
-
   waveContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -306,7 +280,6 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#FFFFFF',
   },
-
   skipBtn: { paddingVertical: 8 },
   skipText: { fontSize: 15, fontWeight: '500' },
 });

@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "662747509252",
+    "project_id": "unbounded-4b73f",
+    "storage_bucket": "unbounded-4b73f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:662747509252:android:93ed35ce4ca5493a5bfb51",
+        "android_client_info": {
+          "package_name": "com.unbounded"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "662747509252-mp1iruph3r84vf435m30hdt04gu325sf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.unbounded",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "662747509252-chveu1qg263g4ph50v55s7kdfjpuc08v.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBZsgLT2V-X3XPg9-9CWdn4n24Ezi3uGjM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "662747509252-chveu1qg263g4ph50v55s7kdfjpuc08v.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -22,6 +22,7 @@ export interface Conversation {
   expectedOtherLanguage?: string | null;
   inviteCode: string | null;
   status: 'waiting' | 'active';
+  mode?: 'faceToFace';
   createdBy: string;
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
@@ -149,6 +150,25 @@ function generateInviteCode(): string {
   return code;
 }
 
+export async function createFaceToFaceConversation(
+  userId: string,
+  langA: string,
+  langB: string,
+): Promise<string> {
+  const convoRef = await addDoc(collection(db, 'conversations'), {
+    participants: [userId],
+    participantLanguages: { [userId]: langA },
+    expectedOtherLanguage: langB,
+    inviteCode: null,
+    status: 'active',
+    mode: 'faceToFace',
+    createdBy: userId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return convoRef.id;
+}
+
 export async function createConversation(
   userId: string,
   myLanguage: string,
@@ -218,6 +238,7 @@ export function subscribeToConversation(
         expectedOtherLanguage: data.expectedOtherLanguage,
         inviteCode: data.inviteCode,
         status: data.status,
+        mode: data.mode,
         createdBy: data.createdBy,
         createdAt: data.createdAt,
         updatedAt: data.updatedAt,
@@ -309,8 +330,10 @@ export function subscribeToConversations(
           id: docSnap.id,
           participants: data.participants,
           participantLanguages: data.participantLanguages,
+          expectedOtherLanguage: data.expectedOtherLanguage,
           inviteCode: data.inviteCode,
           status: data.status,
+          mode: data.mode,
           createdBy: data.createdBy,
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,

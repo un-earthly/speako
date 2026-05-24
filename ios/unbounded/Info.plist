@@ -7,7 +7,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>unbounded</string>
+    <string>Speako</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -27,14 +27,14 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>unbounded</string>
-          <string>com.normod.unbounded</string>
+          <string>speako</string>
+          <string>com.unbounded</string>
         </array>
       </dict>
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>exp+unbounded</string>
+          <string>exp+speako</string>
         </array>
       </dict>
     </array>
@@ -60,11 +60,11 @@
     <key>NSLocalNetworkUsageDescription</key>
     <string>Expo Dev Launcher uses the local network to discover and connect to development servers running on your computer.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Allow unbounded to access your microphone for voice messages</string>
+    <string>Allow Speako to access your microphone for voice messages</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your photos</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Allow unbounded to use speech recognition to transcribe your voice</string>
+    <string>Allow Speako to use speech recognition to transcribe your voice</string>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
     <key>UIRequiredDeviceCapabilities</key>

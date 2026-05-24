@@ -21,4 +21,5 @@ export const Routes = {
   ChangePassword: 'ChangePassword',
   ChangeLanguage: 'ChangeLanguage',
   ChangeTheme: 'ChangeTheme',
+  FaceToFace: 'FaceToFace',
 } as const;

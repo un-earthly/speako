@@ -38,7 +38,7 @@ export function WaitingScreen({ route, navigation }: any) {
 
   const handleShare = async () => {
     await Share.share({
-      message: `Join my conversation on Unbounded!\n\nInvite code: ${inviteCode}`,
+      message: `Join my conversation on Speako!\n\nInvite code: ${inviteCode}`,
     });
   };
 

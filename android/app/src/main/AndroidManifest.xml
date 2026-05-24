@@ -31,8 +31,8 @@
         <action android:name="android.intent.action.VIEW"/>
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
-        <data android:scheme="unbounded"/>
-        <data android:scheme="exp+unbounded"/>
+        <data android:scheme="speako"/>
+        <data android:scheme="exp+speako"/>
       </intent-filter>
     </activity>
   </application>
