@@ -13,6 +13,22 @@ function toLocale(code: string): string {
 
 // ── Individual translation backends ──────────────────────────────────────────
 
+async function translateWithGoogle(text: string, src: string, tgt: string): Promise<string | null> {
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${src}&tl=${tgt}&dt=t&q=${encodeURIComponent(text)}`;
+    const res = await fetch(url);
+    const json = await res.json();
+    const translated = (json[0] as any[][])
+      ?.map((chunk) => chunk[0])
+      .filter(Boolean)
+      .join('');
+    if (!translated || translated === text) return null;
+    return translated;
+  } catch {
+    return null;
+  }
+}
+
 async function translateWithDeepL(text: string, src: string, tgt: string): Promise<string | null> {
   if (!DEEPL_API_KEY) return null;
   try {
@@ -140,13 +156,18 @@ export async function translateText(
   const deepl = await translateWithDeepL(text, src, tgt);
   if (deepl && deepl !== text) return deepl;
 
-  // 2. MyMemory with full locale pair, chunked for the 500-char free-tier limit
+  // 2. Google Translate (unofficial client, no key required, most reliable free option)
+  const google = await translateWithGoogle(text, src, tgt);
+  if (google && google !== text) return google;
+
+  // 3. MyMemory with full locale pair, chunked for the 500-char free-tier limit
   const myMemory = await translateChunked(text, (chunk) =>
     translateWithMyMemory(chunk, srcLocale, tgtLocale)
   );
   if (myMemory && myMemory !== text) return myMemory;
 
-  // 3. LibreTranslate fallback, also chunked
+  // 4. LibreTranslate fallback, also chunked
+
   const libre = await translateChunked(text, (chunk) =>
     translateWithLibre(chunk, src, tgt)
   );

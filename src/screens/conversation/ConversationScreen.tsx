@@ -114,6 +114,8 @@ export function ConversationScreen({ route, navigation }: any) {
 
   const startRecording = async () => {
     try {
+      const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!granted) return;
       setVoicePartial('');
       setIsRecording(true);
       pulseLoop.current = Animated.loop(

@@ -208,8 +208,8 @@ export function HomeScreen({ navigation }: any) {
         )}
       </View>
 
-      {/* Recent conversations */}
-      {recentConvos.length > 0 && (
+      {/* Recent conversations — hidden while action buttons are expanded to avoid layout overflow */}
+      {recentConvos.length > 0 && !showActions && (
         <View style={styles.recentSection}>
           <Text style={[styles.recentLabel, { color: colors.text }]}>Recent</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recentList}>
