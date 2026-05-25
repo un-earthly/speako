@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,10 @@ import {
   Platform,
   ActivityIndicator,
   Animated,
+  PanResponder,
+  Alert,
 } from 'react-native';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
-import { detectScript } from '../../services/language-detect';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,15 +22,28 @@ import * as Speech from 'expo-speech';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getLanguageByCode } from '../../constants/languages';
-import { sendMessage, subscribeToMessages, type Message } from '../../services/firestore';
-import { translateText } from '../../services/translation';
+import {
+  sendMessage,
+  subscribeToMessages,
+  deleteMessage,
+  deleteAllMessagesInConversation,
+  type Message,
+} from '../../services/firestore';
+import { translateText, translateAutoDetect } from '../../services/translation';
+import { detectScript } from '../../services/language-detect';
+import { Timestamp } from 'firebase/firestore';
+
+const ACTIVATION_THRESHOLD = 60;
+const MAX_DRAG = 100;
+const SNAP_BACK_DURATION = 200;
+
+type Phase = 'idle' | 'recording' | 'processing';
 
 function WordHighlight({ text, baseStyle }: { text: string; baseStyle: any }) {
   const words = text.trim().split(/(\s+)/);
   if (words.length < 2) {
     return <Text style={[baseStyle, { color: '#007AFF', fontWeight: '700' }]}>{text}</Text>;
   }
-  // Last non-empty token is the newest word
   let lastIdx = words.length - 1;
   while (lastIdx > 0 && !words[lastIdx].trim()) lastIdx--;
   const stable = words.slice(0, lastIdx).join('');
@@ -42,21 +56,79 @@ function WordHighlight({ text, baseStyle }: { text: string; baseStyle: any }) {
   );
 }
 
+function SwipeableMessageRow({
+  children,
+  onDelete,
+}: {
+  children: React.ReactNode;
+  onDelete: () => void;
+}) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const [isOpen, setIsOpen] = useState(false);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) => gs.dx < -8 && Math.abs(gs.dx) > Math.abs(gs.dy),
+      onPanResponderMove: (_, gs) => {
+        if (gs.dx < 0) translateX.setValue(Math.max(-80, gs.dx));
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dx < -50) {
+          Animated.spring(translateX, { toValue: -80, friction: 8, useNativeDriver: true }).start();
+          setIsOpen(true);
+        } else {
+          Animated.spring(translateX, { toValue: 0, friction: 8, useNativeDriver: true }).start();
+          setIsOpen(false);
+        }
+      },
+    }),
+  ).current;
+
+  return (
+    <View style={{ overflow: 'hidden', marginBottom: 12 }}>
+      {/* Delete background */}
+      <View style={styles.deleteBg}>
+        <TouchableOpacity onPress={onDelete} style={styles.deleteBtn}>
+          <Ionicons name="trash-outline" size={22} color="#FFF" />
+          <Text style={styles.deleteText}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Row content */}
+      <Animated.View style={{ transform: [{ translateX }] }} {...panResponder.panHandlers}>
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => {
+            if (isOpen) {
+              Animated.spring(translateX, { toValue: 0, friction: 8, useNativeDriver: true }).start();
+              setIsOpen(false);
+            }
+          }}
+        >
+          {children}
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  );
+}
+
 export function FaceToFaceScreen({ route, navigation }: any) {
   const { conversationId, langA, langB } = route.params;
   const { user } = useAuth();
   const { colors } = useTheme();
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
+  const [phase, setPhase] = useState<Phase>('idle');
   const [voicePartial, setVoicePartial] = useState('');
   const [inputMode, setInputMode] = useState<'voice' | 'keyboard'>('voice');
-  const [detectedLang, setDetectedLang] = useState<string | null>(null);
   const [translationPreview, setTranslationPreview] = useState('');
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [cannotDetect, setCannotDetect] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [activeSpeaker, setActiveSpeaker] = useState<'langA' | 'langB' | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -64,11 +136,24 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const insets = useSafeAreaInsets();
 
+  const panX = useRef(new Animated.Value(0)).current;
+  const isDraggingRef = useRef(false);
+
   const langAInfo = getLanguageByCode(langA);
   const langBInfo = getLanguageByCode(langB);
   const langABase = langA.split('-')[0].split('_')[0];
-  const langBBase = langB.split('-')[0].split('_')[0];
 
+  const phaseRef = useRef<Phase>('idle');
+  const recordingStartedAt = useRef(0);
+  const canRecordAfter = useRef(0);
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+
+  // Pre-warm permissions so we don't async-block during the gesture
+  useEffect(() => {
+    ExpoSpeechRecognitionModule.requestPermissionsAsync().catch(() => {});
+  }, []);
+
+  // Subscribe to Firestore messages
   useEffect(() => {
     return subscribeToMessages(conversationId, (msgs) => {
       setMessages(msgs);
@@ -76,101 +161,288 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     });
   }, [conversationId]);
 
+  // Remove optimistic messages once Firestore confirms them
+  useEffect(() => {
+    setOptimisticMessages((prev) => {
+      if (prev.length === 0) return prev;
+      return prev.filter((om) => {
+        return !messages.some((fm) => {
+          const timeMatch =
+            !fm.createdAt ||
+            !om.createdAt ||
+            Math.abs(fm.createdAt.toMillis() - om.createdAt.toMillis()) < 15000;
+          return (
+            timeMatch &&
+            fm.originalText === om.originalText &&
+            fm.senderId === om.senderId &&
+            fm.sourceLanguage === om.sourceLanguage
+          );
+        });
+      });
+    });
+  }, [messages]);
+
   useEffect(() => {
     return () => {
       if (previewTimer.current) clearTimeout(previewTimer.current);
     };
   }, []);
 
-  function detectSpeaker(text: string): { sourceLang: string; targetLang: string } {
-    const detected = detectScript(text.trim());
-    // If script clearly matches langB, person B is speaking
-    if (detected && detected === langBBase) return { sourceLang: langB, targetLang: langA };
-    // Everything else (langA match, unknown Latin, null) → STT is set to langA so it's person A
-    return { sourceLang: langA, targetLang: langB };
-  }
+  // Pulse animation while recording
+  useEffect(() => {
+    if (phase === 'recording') {
+      pulseLoop.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.15, duration: 600, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        ]),
+      );
+      pulseLoop.current.start();
+    } else {
+      pulseLoop.current?.stop();
+      pulseAnim.setValue(1);
+    }
+    return () => {
+      pulseLoop.current?.stop();
+    };
+  }, [phase, pulseAnim]);
+
+  // Side label opacity animations based on drag position
+  const leftOpacity = panX.interpolate({
+    inputRange: [-MAX_DRAG, -ACTIVATION_THRESHOLD, 0],
+    outputRange: [1, 1, 0.4],
+    extrapolate: 'clamp',
+  });
+  const rightOpacity = panX.interpolate({
+    inputRange: [0, ACTIVATION_THRESHOLD, MAX_DRAG],
+    outputRange: [0.4, 1, 1],
+    extrapolate: 'clamp',
+  });
+
+  // ── Speech recognition events ──────────────────────────────────────────────
 
   useSpeechRecognitionEvent('result', async (e) => {
     const text = e.results[0]?.transcript ?? '';
 
     if (!e.isFinal) {
       setVoicePartial(text);
-      const detected = detectScript(text);
-      if (detected === langABase) setDetectedLang(langA);
-      else if (detected === langBBase) setDetectedLang(langB);
       return;
     }
 
-    pulseLoop.current?.stop();
-    pulseAnim.setValue(1);
-    setIsRecording(false);
     setVoicePartial('');
 
-    if (!text || !user) return;
-
-    const pair = detectSpeaker(text);
-    if (!pair) {
-      setCannotDetect(true);
-      setTimeout(() => setCannotDetect(false), 3000);
-      setDetectedLang(null);
+    if (phaseRef.current !== 'recording') return;
+    if (!text.trim()) {
+      resetRecordingState();
       return;
     }
 
+    setPhase('processing');
     setSending(true);
+
     try {
-      const translated = await translateText(text, pair.sourceLang, pair.targetLang);
-      await sendMessage(conversationId, user.uid, text, translated, pair.sourceLang, pair.targetLang, 'voice');
+      let sourceLang: string;
+      let targetLang: string;
+      let translated: string;
+
+      const chosenLang = activeSpeaker === 'langB' ? langB : langA;
+      const chosenBase = chosenLang.split('-')[0];
+      const transcriptScript = detectScript(text);
+
+      if (transcriptScript === chosenBase) {
+        sourceLang = chosenLang;
+        targetLang = activeSpeaker === 'langB' ? langA : langB;
+        translated = await translateText(text, sourceLang, targetLang);
+      } else {
+        const result = await translateAutoDetect(text, langA, langB);
+        sourceLang = result.sourceLang;
+        targetLang = result.targetLang;
+        translated = result.translated;
+      }
+
+      addOptimisticMessage(text, translated, sourceLang, targetLang, 'voice');
+      sendMessage(conversationId, user!.uid, text, translated, sourceLang, targetLang, 'voice').catch(
+        (err) => console.error('Firestore send failed:', err),
+      );
     } catch (err) {
-      console.error('FaceToFace send failed:', err);
+      console.error('Finalize failed:', err);
     } finally {
       setSending(false);
-      setDetectedLang(null);
+      resetRecordingState();
     }
   });
 
   useSpeechRecognitionEvent('volumechange', (e) => {
-    const vol = e.value; // -2 to 10; below 0 is inaudible
+    const vol = e.value;
     const scale = vol < 0 ? 1 : 1 + Math.min(vol / 10, 1) * 0.45;
     Animated.timing(pulseAnim, { toValue: scale, duration: 80, useNativeDriver: true }).start();
   });
 
-  useSpeechRecognitionEvent('error', () => {
-    pulseLoop.current?.stop();
-    pulseAnim.setValue(1);
-    setIsRecording(false);
-    setVoicePartial('');
-    setDetectedLang(null);
+  useSpeechRecognitionEvent('error', (e) => {
+    console.error('STT error:', e.error, e.message);
+    resetRecordingState();
   });
 
-  const startRecording = async () => {
+  // ── PanResponder for walkie-talkie slider ──────────────────────────────────
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 5,
+      onPanResponderGrant: () => {
+        isDraggingRef.current = true;
+        panX.stopAnimation();
+        setShowMenu(false);
+      },
+      onPanResponderMove: (_, gs) => {
+        if (!isDraggingRef.current) return;
+        const clampedDx = Math.max(-MAX_DRAG, Math.min(MAX_DRAG, gs.dx));
+        panX.setValue(clampedDx);
+
+        if (gs.dx > ACTIVATION_THRESHOLD && phaseRef.current === 'idle') {
+          startRecording(langA, 'langA');
+        } else if (gs.dx < -ACTIVATION_THRESHOLD && phaseRef.current === 'idle') {
+          startRecording(langB, 'langB');
+        }
+      },
+      onPanResponderRelease: () => {
+        isDraggingRef.current = false;
+        if (phaseRef.current === 'recording') {
+          const elapsed = Date.now() - recordingStartedAt.current;
+          if (elapsed < 400) {
+            // Too quick — abort to avoid confusing the STT engine
+            try {
+              ExpoSpeechRecognitionModule.abort();
+            } catch {
+              /* ignore */
+            }
+            canRecordAfter.current = Date.now() + 200;
+            resetRecordingState();
+          } else {
+            try {
+              ExpoSpeechRecognitionModule.stop();
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+        Animated.timing(panX, {
+          toValue: 0,
+          duration: SNAP_BACK_DURATION,
+          useNativeDriver: true,
+        }).start();
+      },
+      onPanResponderTerminate: () => {
+        isDraggingRef.current = false;
+        if (phaseRef.current === 'recording') {
+          try {
+            ExpoSpeechRecognitionModule.abort();
+          } catch {
+            /* ignore */
+          }
+          canRecordAfter.current = Date.now() + 200;
+          resetRecordingState();
+        }
+        Animated.timing(panX, {
+          toValue: 0,
+          duration: SNAP_BACK_DURATION,
+          useNativeDriver: true,
+        }).start();
+      },
+    }),
+  ).current;
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  const resetRecordingState = useCallback(() => {
+    pulseLoop.current?.stop();
+    pulseAnim.setValue(1);
+    setPhase('idle');
+    phaseRef.current = 'idle';
+    setVoicePartial('');
+    setActiveSpeaker(null);
+  }, [pulseAnim]);
+
+  const addOptimisticMessage = (
+    originalText: string,
+    translatedText: string,
+    sourceLang: string,
+    targetLang: string,
+    type: 'text' | 'voice' = 'voice',
+  ) => {
+    if (!user) return;
+    const optimistic: Message = {
+      id: `opt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      conversationId,
+      senderId: user.uid,
+      originalText,
+      translatedText,
+      sourceLanguage: sourceLang,
+      targetLanguage: targetLang,
+      type,
+      createdAt: Timestamp.now(),
+    };
+    setOptimisticMessages((prev) => [...prev, optimistic]);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+  };
+
+  const startRecording = (sttLang: string, speaker: 'langA' | 'langB') => {
+    if (phaseRef.current !== 'idle') return;
+    if (Date.now() < canRecordAfter.current) return;
+
+    setVoicePartial('');
+    setActiveSpeaker(speaker);
+    setPhase('recording');
+    phaseRef.current = 'recording';
+    recordingStartedAt.current = Date.now();
+
     try {
-      const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (!granted) return;
-      setVoicePartial('');
-      setDetectedLang(null);
-      setCannotDetect(false);
-      setIsRecording(true);
-      // Use langA as STT base; detectScript identifies the actual language from the transcript
       ExpoSpeechRecognitionModule.start({
-        lang: langA,
+        lang: sttLang,
         interimResults: true,
         volumeChangeEventOptions: { enabled: true, intervalMillis: 100 },
+        addsPunctuation: true,
+        recordingOptions: { persist: true },
       });
-    } catch {
-      pulseLoop.current?.stop();
-      pulseAnim.setValue(1);
-      setIsRecording(false);
+    } catch (err) {
+      console.error('Start recording failed:', err);
+      resetRecordingState();
     }
   };
 
-  const stopRecording = () => {
-    pulseLoop.current?.stop();
-    pulseAnim.setValue(1);
-    setIsRecording(false);
-    setVoicePartial('');
-    setDetectedLang(null);
-    try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
+  const handleDeleteMessage = (messageId: string) => {
+    Alert.alert('Delete message', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          if (messageId.startsWith('opt-')) {
+            setOptimisticMessages((prev) => prev.filter((m) => m.id !== messageId));
+          } else {
+            deleteMessage(messageId).catch((err) => console.error('Delete failed:', err));
+          }
+        },
+      },
+    ]);
   };
+
+  const handleClearConversation = () => {
+    Alert.alert('Clear conversation', 'Delete all messages in this chat?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete All',
+        style: 'destructive',
+        onPress: () => {
+          deleteAllMessagesInConversation(conversationId).catch((err) =>
+            console.error('Clear failed:', err),
+          );
+        },
+      },
+    ]);
+  };
+
+  // ── Keyboard mode ──────────────────────────────────────────────────────────
 
   const handleTextChange = (text: string) => {
     setInputText(text);
@@ -182,13 +454,10 @@ export function FaceToFaceScreen({ route, navigation }: any) {
       return;
     }
 
-    const pair = detectSpeaker(text);
-    if (!pair) return;
-
     setIsPreviewLoading(true);
     previewTimer.current = setTimeout(async () => {
-      const preview = await translateText(text, pair.sourceLang, pair.targetLang);
-      setTranslationPreview(preview !== text ? preview : '');
+      const { translated } = await translateAutoDetect(text, langA, langB);
+      setTranslationPreview(translated !== text ? translated : '');
       setIsPreviewLoading(false);
     }, 900);
   };
@@ -197,21 +466,18 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     const text = inputText.trim();
     if (!text || !user || sending) return;
 
-    const pair = detectSpeaker(text);
-    if (!pair) {
-      setCannotDetect(true);
-      setTimeout(() => setCannotDetect(false), 3000);
-      return;
-    }
-
     setInputText('');
     setTranslationPreview('');
     setIsPreviewLoading(false);
     clearTimeout(previewTimer.current);
     setSending(true);
+
     try {
-      const translated = await translateText(text, pair.sourceLang, pair.targetLang);
-      await sendMessage(conversationId, user.uid, text, translated, pair.sourceLang, pair.targetLang);
+      const { translated, sourceLang, targetLang } = await translateAutoDetect(text, langA, langB);
+      addOptimisticMessage(text, translated, sourceLang, targetLang, 'text');
+      sendMessage(conversationId, user.uid, text, translated, sourceLang, targetLang, 'text').catch(
+        (err) => console.error('FaceToFace send failed:', err),
+      );
     } catch (err) {
       console.error('FaceToFace send failed:', err);
     } finally {
@@ -219,16 +485,26 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     }
   };
 
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  const allMessages = useMemo(() => {
+    return [...messages, ...optimisticMessages].sort((a, b) => {
+      const aTime = a.createdAt?.toMillis?.() ?? 0;
+      const bTime = b.createdAt?.toMillis?.() ?? 0;
+      return aTime - bTime;
+    });
+  }, [messages, optimisticMessages]);
+
   const renderMessage = ({ item }: { item: Message }) => {
     const itemBase = item.sourceLanguage.split('-')[0].split('_')[0];
     const isPersonA = itemBase === langABase;
     const speakerInfo = isPersonA ? langAInfo : langBInfo;
 
-    return (
+    const bubble = (
       <View style={[styles.messageRow, isPersonA ? styles.rowRight : styles.rowLeft]}>
         {!isPersonA && (
           <View style={[styles.avatarSmall, { backgroundColor: colors.surface }]}>
-            <FlagEmoji countryCode={langBInfo?.countryCode ?? 'US'} size={18} />
+            <FlagEmoji countryCode={langBInfo?.countryCode ?? 'BD'} size={18} />
           </View>
         )}
         <View style={styles.messageContent}>
@@ -244,12 +520,22 @@ export function FaceToFaceScreen({ route, navigation }: any) {
               {item.originalText}
             </Text>
             {item.translatedText !== item.originalText && (
-              <Text style={[styles.secondaryText, { color: isPersonA ? 'rgba(255,255,255,0.7)' : colors.textSecondary }]}>
+              <Text
+                style={[
+                  styles.secondaryText,
+                  { color: isPersonA ? 'rgba(255,255,255,0.7)' : colors.textSecondary },
+                ]}
+              >
                 {item.translatedText}
               </Text>
             )}
           </View>
-          <View style={[styles.messageActions, isPersonA ? { justifyContent: 'flex-end' } : { justifyContent: 'flex-start' }]}>
+          <View
+            style={[
+              styles.messageActions,
+              isPersonA ? { justifyContent: 'flex-end' } : { justifyContent: 'flex-start' },
+            ]}
+          >
             <TouchableOpacity
               style={[styles.actionBtn, { borderColor: colors.border }]}
               onPress={() => Speech.speak(item.translatedText, { language: item.targetLanguage })}
@@ -271,16 +557,34 @@ export function FaceToFaceScreen({ route, navigation }: any) {
         )}
       </View>
     );
+
+    return (
+      <SwipeableMessageRow onDelete={() => handleDeleteMessage(item.id)}>
+        {bubble}
+      </SwipeableMessageRow>
+    );
   };
 
-  const detectedLangInfo = detectedLang === langA ? langAInfo : detectedLang === langB ? langBInfo : null;
+  const micBackgroundColor =
+    activeSpeaker === 'langB'
+      ? '#34C759'
+      : activeSpeaker === 'langA'
+      ? '#007AFF'
+      : '#007AFF';
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={{ flex: 1 }}
+    >
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-
         {/* Header */}
-        <View style={[styles.topBar, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
+        <View
+          style={[
+            styles.topBar,
+            { paddingTop: insets.top + 8, borderBottomColor: colors.border },
+          ]}
+        >
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
@@ -291,17 +595,47 @@ export function FaceToFaceScreen({ route, navigation }: any) {
             </View>
             <Ionicons name="repeat" size={14} color={colors.textSecondary} />
             <View style={[styles.langChip, { backgroundColor: colors.surface }]}>
-              <FlagEmoji countryCode={langBInfo?.countryCode ?? 'US'} size={14} />
+              <FlagEmoji countryCode={langBInfo?.countryCode ?? 'BD'} size={14} />
               <Text style={[styles.langChipText, { color: colors.text }]}>{langBInfo?.name}</Text>
             </View>
           </View>
-          <View style={{ width: 34 }} />
+          <TouchableOpacity onPress={() => setShowMenu((v) => !v)}>
+            <Ionicons name="ellipsis-horizontal" size={24} color={colors.text} />
+          </TouchableOpacity>
         </View>
+
+        {/* Menu dropdown */}
+        {showMenu && (
+          <>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={() => setShowMenu(false)}
+            />
+            <View
+              style={[
+                styles.menuDropdown,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setShowMenu(false);
+                  handleClearConversation();
+                }}
+              >
+                <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+                <Text style={[styles.menuItemText, { color: '#FF3B30' }]}>Clear conversation</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
 
         {/* Messages */}
         <FlatList
           ref={flatListRef}
-          data={messages}
+          data={allMessages}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           contentContainerStyle={styles.messagesList}
@@ -309,78 +643,97 @@ export function FaceToFaceScreen({ route, navigation }: any) {
             <View style={styles.emptyState}>
               <Ionicons name="people-outline" size={44} color={colors.textSecondary} />
               <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                Tap the mic and speak in either language.{'\n'}Translation happens automatically.
+                Drag the mic toward your language and hold to speak.{'\n'}Release to send.
               </Text>
             </View>
           }
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
 
-        {/* Cannot detect warning */}
-        {cannotDetect && (
-          <View style={styles.warnBanner}>
-            <Ionicons name="warning-outline" size={14} color="#FFF" />
-            <Text style={styles.warnText}>Could not detect language — speak more clearly</Text>
-          </View>
-        )}
-
         {/* Translation preview (keyboard mode) */}
         {inputMode === 'keyboard' && (translationPreview || isPreviewLoading) && (
-          <View style={[styles.previewStrip, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+          <View
+            style={[
+              styles.previewStrip,
+              { backgroundColor: colors.surface, borderTopColor: colors.border },
+            ]}
+          >
             {isPreviewLoading ? (
               <ActivityIndicator size="small" color={colors.textSecondary} />
             ) : (
-              <Text style={[styles.previewText, { color: colors.textSecondary }]}>{translationPreview}</Text>
+              <Text style={[styles.previewText, { color: colors.textSecondary }]}>
+                {translationPreview}
+              </Text>
             )}
           </View>
         )}
 
         {/* Input bar */}
-        <View style={[styles.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: insets.bottom + 10 }]}>
+        <View
+          style={[
+            styles.inputBar,
+            { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: insets.bottom + 10 },
+          ]}
+        >
           {inputMode === 'voice' ? (
             <View style={styles.voiceRow}>
               {/* Keyboard toggle */}
               <TouchableOpacity
                 style={styles.modeToggle}
-                onPress={() => { stopRecording(); setInputMode('keyboard'); }}
+                onPress={() => {
+                  if (phaseRef.current === 'recording') {
+                    try {
+                      ExpoSpeechRecognitionModule.stop();
+                    } catch {
+                      /* ignore */
+                    }
+                    resetRecordingState();
+                  }
+                  setInputMode('keyboard');
+                }}
               >
                 <Ionicons name="keypad-outline" size={22} color={colors.textSecondary} />
               </TouchableOpacity>
 
-              {/* Central mic area */}
-              <View style={styles.voiceCenter}>
-                {isRecording ? (
-                  <TouchableOpacity onPress={stopRecording} activeOpacity={0.85} style={styles.recordingWrapper}>
-                    <Animated.View style={[styles.micBtnLarge, styles.micBtnRecording, { transform: [{ scale: pulseAnim }] }]}>
-                      <Ionicons name="stop" size={28} color="#FFF" />
-                    </Animated.View>
-                    {voicePartial ? (
-                      <WordHighlight
-                        text={voicePartial}
-                        baseStyle={[styles.listeningLabel, { color: colors.text }]}
-                      />
+              {/* Walkie-talkie slider */}
+              <View style={styles.sliderContainer}>
+                {/* Left label */}
+                <Animated.View style={[styles.sliderSide, { opacity: leftOpacity }]}>
+                  <FlagEmoji countryCode={langBInfo?.countryCode ?? 'BD'} size={22} />
+                  <Text style={[styles.sliderSideText, { color: colors.text }]}>
+                    {langBInfo?.nativeName || langBInfo?.name}
+                  </Text>
+                </Animated.View>
+
+                {/* Track + Draggable Mic */}
+                <View style={styles.sliderTrack}>
+                  <View style={[styles.sliderTrackLine, { backgroundColor: colors.border }]} />
+
+                  <Animated.View
+                    style={[
+                      styles.micBtnLarge,
+                      {
+                        transform: [{ translateX: panX }, { scale: pulseAnim }],
+                        backgroundColor: phase === 'recording' ? '#FF3B30' : micBackgroundColor,
+                      },
+                    ]}
+                    {...panResponder.panHandlers}
+                  >
+                    {phase === 'processing' ? (
+                      <ActivityIndicator size="small" color="#FFF" />
                     ) : (
-                      <Text style={[styles.listeningLabel, { color: colors.textSecondary }]}>Listening...</Text>
+                      <Ionicons name="mic" size={28} color="#FFF" />
                     )}
-                    {detectedLangInfo && (
-                      <View style={styles.speakerIndicator}>
-                        <FlagEmoji countryCode={detectedLangInfo.countryCode} size={14} />
-                        <Text style={[styles.speakerLabel, { color: colors.textSecondary }]}>{detectedLangInfo.name}</Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity onPress={startRecording} activeOpacity={0.85} style={styles.recordingWrapper}>
-                    <View style={[styles.micBtnLarge, { backgroundColor: '#007AFF' }]}>
-                      {sending ? (
-                        <ActivityIndicator size="small" color="#FFF" />
-                      ) : (
-                        <Ionicons name="mic" size={28} color="#FFF" />
-                      )}
-                    </View>
-                    <Text style={[styles.tapLabel, { color: colors.textSecondary }]}>Tap to speak</Text>
-                  </TouchableOpacity>
-                )}
+                  </Animated.View>
+                </View>
+
+                {/* Right label */}
+                <Animated.View style={[styles.sliderSide, { opacity: rightOpacity }]}>
+                  <FlagEmoji countryCode={langAInfo?.countryCode ?? 'US'} size={22} />
+                  <Text style={[styles.sliderSideText, { color: colors.text }]}>
+                    {langAInfo?.nativeName || langAInfo?.name}
+                  </Text>
+                </Animated.View>
               </View>
 
               {/* Spacer to balance layout */}
@@ -388,7 +741,13 @@ export function FaceToFaceScreen({ route, navigation }: any) {
             </View>
           ) : (
             <View style={styles.keyboardRow}>
-              <TouchableOpacity onPress={() => { setInputText(''); setTranslationPreview(''); setInputMode('voice'); }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setInputText('');
+                  setTranslationPreview('');
+                  setInputMode('voice');
+                }}
+              >
                 <View style={[styles.actionBtn2, { backgroundColor: colors.surface }]}>
                   <Ionicons name="mic" size={20} color={colors.textSecondary} />
                 </View>
@@ -406,19 +765,37 @@ export function FaceToFaceScreen({ route, navigation }: any) {
                 />
               </View>
               <TouchableOpacity onPress={handleSend} disabled={sending || !inputText.trim()}>
-                <View style={[
-                  styles.actionBtn2,
-                  { backgroundColor: (sending || !inputText.trim()) ? colors.surface : '#007AFF' },
-                ]}>
+                <View
+                  style={[
+                    styles.actionBtn2,
+                    {
+                      backgroundColor: sending || !inputText.trim() ? colors.surface : '#007AFF',
+                    },
+                  ]}
+                >
                   {sending ? (
                     <ActivityIndicator size="small" color={colors.textSecondary} />
                   ) : (
-                    <Ionicons name="send" size={16} color={inputText.trim() ? '#FFF' : colors.textSecondary} />
+                    <Ionicons
+                      name="send"
+                      size={16}
+                      color={inputText.trim() ? '#FFF' : colors.textSecondary}
+                    />
                   )}
                 </View>
               </TouchableOpacity>
             </View>
           )}
+
+          {/* Partial transcript hint */}
+          {phase === 'recording' && voicePartial ? (
+            <View style={styles.partialStrip}>
+              <WordHighlight
+                text={voicePartial}
+                baseStyle={[styles.partialText, { color: colors.text }]}
+              />
+            </View>
+          ) : null}
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -449,6 +826,30 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   langChipText: { fontSize: 13, fontWeight: '500' },
+  menuDropdown: {
+    position: 'absolute',
+    top: 50,
+    right: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    zIndex: 100,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  menuItemText: { fontSize: 15, fontWeight: '500' },
   messagesList: { padding: 16, flexGrow: 1 },
   emptyState: {
     flex: 1,
@@ -463,7 +864,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 8,
-    marginBottom: 12,
   },
   rowLeft: { justifyContent: 'flex-start' },
   rowRight: { justifyContent: 'flex-end' },
@@ -498,15 +898,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  warnBanner: {
-    flexDirection: 'row',
+  deleteBg: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 80,
+    backgroundColor: '#FF3B30',
+    borderRadius: 12,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#FF9500',
   },
-  warnText: { color: '#FFF', fontSize: 13, fontWeight: '500', flex: 1 },
+  deleteBtn: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  deleteText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '600',
+  },
   previewStrip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -533,13 +944,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  voiceCenter: {
+  sliderContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+  },
+  sliderSide: {
+    alignItems: 'center',
+    gap: 4,
+    width: 70,
+  },
+  sliderSideText: {
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  sliderTrack: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    height: 80,
   },
-  recordingWrapper: {
-    alignItems: 'center',
-    gap: 8,
+  sliderTrackLine: {
+    position: 'absolute',
+    height: 4,
+    borderRadius: 2,
+    width: '100%',
   },
   micBtnLarge: {
     width: 72,
@@ -547,31 +979,23 @@ const styles = StyleSheet.create({
     borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#007AFF',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.2,
     shadowRadius: 10,
     elevation: 5,
+    zIndex: 10,
   },
-  micBtnRecording: {
-    backgroundColor: '#FF3B30',
-    shadowColor: '#FF3B30',
-  },
-  listeningLabel: {
-    fontSize: 14,
-    textAlign: 'center',
-    maxWidth: 200,
-  },
-  tapLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  speakerIndicator: {
-    flexDirection: 'row',
+  partialStrip: {
     alignItems: 'center',
-    gap: 5,
+    paddingTop: 6,
+    paddingBottom: 2,
   },
-  speakerLabel: { fontSize: 12 },
+  partialText: {
+    fontSize: 13,
+    textAlign: 'center',
+    maxWidth: 260,
+  },
   keyboardRow: {
     flexDirection: 'row',
     alignItems: 'center',

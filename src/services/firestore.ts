@@ -3,6 +3,7 @@ import {
   doc,
   addDoc,
   updateDoc,
+  deleteDoc,
   onSnapshot,
   query,
   orderBy,
@@ -344,6 +345,17 @@ export function subscribeToConversations(
     },
     (err) => console.error('subscribeToConversations:', err.message),
   );
+}
+
+export async function deleteMessage(messageId: string): Promise<void> {
+  await deleteDoc(doc(db, 'messages', messageId));
+}
+
+export async function deleteAllMessagesInConversation(conversationId: string): Promise<void> {
+  const q = query(collection(db, 'messages'), where('conversationId', '==', conversationId));
+  const snapshot = await getDocs(q);
+  const deletes = snapshot.docs.map((d) => deleteDoc(doc(db, 'messages', d.id)));
+  await Promise.all(deletes);
 }
 
 export async function getUserMessages(userId: string): Promise<Message[]> {

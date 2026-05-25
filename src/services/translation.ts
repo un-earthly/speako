@@ -1,4 +1,3 @@
-import { detectScript } from './language-detect';
 import { getLanguageByCode } from '../constants/languages';
 
 // Optional DeepL key — set to unlock 500K chars/month free tier
@@ -132,10 +131,54 @@ async function translateChunked(
   return results.join(' ');
 }
 
-// ── Auto-detect source language ───────────────────────────────────────────────
+// ── Auto-detect source language and translate ─────────────────────────────────
 
-export function detectSourceLanguage(text: string, fallback: string): string {
-  return detectScript(text) ?? fallback;
+// Calls Google Translate with sl=auto&tl=langA.
+// If Google detects the source as langB (or not langA), the returned translation
+// is already langB→langA — no second call needed, no forced sl= on the wrong script.
+// If Google detects langA, we make one more call to translate to langB.
+export async function translateAutoDetect(
+  text: string,
+  langA: string,
+  langB: string,
+): Promise<{ translated: string; sourceLang: string; targetLang: string }> {
+  const langABase = langA.split('-')[0];
+  const langBBase = langB.split('-')[0];
+  if (!text.trim() || langABase === langBBase) {
+    return { translated: text, sourceLang: langA, targetLang: langB };
+  }
+  try {
+    // Translate to langA with auto-detect — one call gives us detected lang + translation
+    const urlA = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${langABase}&dt=t&q=${encodeURIComponent(text)}`;
+    const resA = await fetch(urlA);
+    const jsonA = await resA.json();
+    const detectedSource: string = (jsonA[2] ?? '').split('-')[0];
+    const translatedToA = (jsonA[0] as any[][])?.map((c) => c[0]).filter(Boolean).join('') ?? '';
+
+    if (detectedSource !== langABase) {
+      // Google detected something other than langA → Person B is speaking
+      // translatedToA is already the correct langB→langA translation
+      return {
+        translated: translatedToA && translatedToA !== text ? translatedToA : text,
+        sourceLang: langB,
+        targetLang: langA,
+      };
+    }
+
+    // Google detected langA → Person A is speaking, translate to langB
+    const urlB = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${langABase}&tl=${langBBase}&dt=t&q=${encodeURIComponent(text)}`;
+    const resB = await fetch(urlB);
+    const jsonB = await resB.json();
+    const translatedToB = (jsonB[0] as any[][])?.map((c) => c[0]).filter(Boolean).join('') ?? '';
+    return {
+      translated: translatedToB && translatedToB !== text ? translatedToB : text,
+      sourceLang: langA,
+      targetLang: langB,
+    };
+  } catch {
+    const translated = await translateText(text, langA, langB);
+    return { translated, sourceLang: langA, targetLang: langB };
+  }
 }
 
 // ── Main translation entry point ──────────────────────────────────────────────
