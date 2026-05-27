@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
@@ -7,6 +7,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Routes } from '../../constants/routes';
+import { LoadingOverlay } from '../../components/common/LoadingOverlay';
 
 export function ForgotPasswordScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
@@ -38,7 +39,7 @@ export function ForgotPasswordScreen({ navigation }: any) {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, paddingTop: insets.top }}>
       <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <Ionicons name="key" size={56} color="#007AFF" />
+          <Image source={require('../../assets/login-banner.png')} style={styles.banner} resizeMode="contain" />
           <Text style={[styles.title, { color: colors.text }]}>Forgot Your Password?</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             Enter the email associated with your account and we will send an email with instructions to reset your password.
@@ -50,7 +51,7 @@ export function ForgotPasswordScreen({ navigation }: any) {
             <>
               <Input label="Email Address" placeholder="Enter your email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
-              <Button title="Send OTP Code" onPress={handleSend} loading={loading} />
+              <Button title="Send OTP Code" onPress={handleSend} loading={false} disabled={loading} />
             </>
           ) : (
             <View style={styles.successBox}>
@@ -64,6 +65,8 @@ export function ForgotPasswordScreen({ navigation }: any) {
             </View>
           )}
         </View>
+
+        <LoadingOverlay visible={loading} message="Sending..." />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -79,6 +82,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 32,
     marginTop: 40,
+  },
+  banner: {
+    width: 180,
+    height: 140,
+    marginBottom: 8,
   },
   title: {
     fontSize: 24,

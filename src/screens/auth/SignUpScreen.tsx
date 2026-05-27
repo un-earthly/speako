@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Routes } from '../../constants/routes';
+import { LoadingOverlay } from '../../components/common/LoadingOverlay';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 
 export function SignUpScreen({ navigation }: any) {
@@ -49,7 +50,7 @@ export function SignUpScreen({ navigation }: any) {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, paddingTop: insets.top }}>
       <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <Text style={{ fontSize: 64 }}>🗣️</Text>
+          <Image source={require('../../assets/signin-banner.png')} style={styles.banner} resizeMode="contain" />
           <Text style={[styles.title, { color: colors.text }]}>Join Translator Today</Text>
         </View>
 
@@ -70,7 +71,7 @@ export function SignUpScreen({ navigation }: any) {
             </Text>
           </TouchableOpacity>
 
-          <Button title="Sign Up" onPress={handleSignUp} loading={loading} />
+          <Button title="Sign Up" onPress={handleSignUp} loading={false} disabled={loading || googleLoading} />
 
           <View style={styles.divider}>
             <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
@@ -78,10 +79,12 @@ export function SignUpScreen({ navigation }: any) {
             <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
           </View>
 
-          <Button title="Continue with Google" variant="secondary" onPress={() => promptAsync()} loading={googleLoading} />
+          <Button title="Continue with Google" variant="secondary" onPress={() => promptAsync()} loading={false} disabled={loading || googleLoading} />
           <View style={{ height: 12 }} />
           <Button title="Continue with Apple" variant="secondary" onPress={() => {}} />
         </View>
+
+        <LoadingOverlay visible={loading || googleLoading} message={googleLoading ? 'Signing up...' : 'Signing up...'} />
 
         <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
           <Text style={{ color: colors.textSecondary }}>Already have an account? </Text>
@@ -104,6 +107,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 32,
     marginTop: 40,
+  },
+  banner: {
+    width: 200,
+    height: 160,
+    marginBottom: 8,
   },
   title: {
     fontSize: 24,
