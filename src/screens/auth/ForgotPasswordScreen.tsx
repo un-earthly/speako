@@ -39,7 +39,7 @@ export function ForgotPasswordScreen({ navigation }: any) {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, paddingTop: insets.top }}>
       <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <Image source={require('../../assets/login-banner.png')} style={styles.banner} resizeMode="contain" />
+          <Image source={require('../../../assets/login-banner.png')} style={styles.banner} resizeMode="contain" />
           <Text style={[styles.title, { color: colors.text }]}>Forgot Your Password?</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             Enter the email associated with your account and we will send an email with instructions to reset your password.

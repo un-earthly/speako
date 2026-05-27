@@ -44,6 +44,13 @@
           "microphonePermission": "Allow Speako to access your microphone for voice messages",
           "speechRecognitionPermission": "Allow Speako to use speech recognition to transcribe your voice"
         }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-6826771706478909~1596967945",
+          "iosAppId": "ca-app-pub-6826771706478909~1596967945"
+        }
       ]
     ]
   }

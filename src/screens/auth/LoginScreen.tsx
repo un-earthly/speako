@@ -39,7 +39,7 @@ export function LoginScreen({ navigation }: any) {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, paddingTop: insets.top }}>
       <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <Image source={require('../../assets/login-banner.png')} style={styles.banner} resizeMode="contain" />
+          <Image source={require('../../../assets/login-banner.png')} style={styles.banner} resizeMode="contain" />
           <Text style={[styles.title, { color: colors.text }]}>Welcome Back 👋</Text>
         </View>
 
