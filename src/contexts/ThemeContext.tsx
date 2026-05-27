@@ -9,6 +9,7 @@ interface ThemeContextValue {
   theme: ThemeMode;
   resolvedTheme: 'light' | 'dark';
   colors: typeof Colors.light;
+  isDark: boolean;
   setTheme: (mode: ThemeMode) => void;
   toggleTheme: () => void;
 }
@@ -36,13 +37,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const resolvedTheme = theme === 'system' ? (systemTheme === 'dark' ? 'dark' : 'light') : theme;
   const colors = resolvedTheme === 'dark' ? Colors.dark : Colors.light;
+  const isDark = resolvedTheme === 'dark';
 
   const toggleTheme = () => {
     setTheme(resolvedTheme === 'light' ? 'dark' : 'light');
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, resolvedTheme, colors, setTheme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, resolvedTheme, colors, isDark, setTheme, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   );

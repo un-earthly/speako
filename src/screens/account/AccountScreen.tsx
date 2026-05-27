@@ -24,7 +24,7 @@ interface Section {
 
 export function AccountScreen({ navigation }: any) {
   const { user, logout } = useAuth();
-  const { theme, resolvedTheme, colors } = useTheme();
+  const { theme, resolvedTheme, colors, isDark } = useTheme();
   const preferredLangName = getLanguageByCode(user?.preferredLanguage || '')?.name || user?.preferredLanguage || 'Not set';
   const insets = useSafeAreaInsets();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -79,8 +79,13 @@ export function AccountScreen({ navigation }: any) {
         </View>
 
         {/* Profile card */}
-        <View style={[styles.profileCard, { backgroundColor: colors.card }]}>
-          <View style={[styles.avatarCircle, { backgroundColor: colors.surface }]}>
+        <View style={[styles.profileCard, {
+          backgroundColor: isDark ? colors.glass : colors.card,
+          borderColor: isDark ? colors.glassBorder : colors.border,
+        }]}>
+          <View style={[styles.avatarCircle, {
+            backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : colors.surfaceHighlight,
+          }]}>
             <Ionicons name="person" size={28} color={colors.textSecondary} />
           </View>
           <View style={styles.profileInfo}>
@@ -99,7 +104,10 @@ export function AccountScreen({ navigation }: any) {
             <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
               {section.title}
             </Text>
-            <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <View style={[styles.card, {
+              backgroundColor: isDark ? colors.glass : colors.card,
+              borderColor: isDark ? colors.glassBorder : colors.border,
+            }]}>
               {section.items.map((item, idx) => (
                 <TouchableOpacity
                   key={item.label}
@@ -178,10 +186,15 @@ const styles = StyleSheet.create({
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 14,
+    borderRadius: 20,
     padding: 16,
     marginBottom: 24,
     gap: 14,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   avatarCircle: {
     width: 52,
@@ -212,8 +225,13 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   card: {
-    borderRadius: 14,
+    borderRadius: 20,
     overflow: 'hidden',
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   row: {
     flexDirection: 'row',

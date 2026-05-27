@@ -54,7 +54,7 @@ function WordHighlight({ text, baseStyle }: { text: string; baseStyle: any }) {
 export function ConversationScreen({ route, navigation }: any) {
   const { conversationId } = route.params || {};
   const { user } = useAuth();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -220,14 +220,10 @@ export function ConversationScreen({ route, navigation }: any) {
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isMe = item.senderId === user?.uid;
-
-    // Receiver sees their own language first (translated), sender's original below.
-    // Sender sees their own text first, translation below.
     const primaryText = isMe ? item.originalText : item.translatedText;
     const secondaryText = isMe ? item.translatedText : item.originalText;
     const speakText = isMe ? item.translatedText : item.originalText;
     const speakLang = isMe ? item.targetLanguage : item.sourceLanguage;
-
     const avatarCountryCode = isMe
       ? (myLang?.countryCode ?? 'US')
       : (otherLang?.countryCode ?? 'US');
@@ -235,7 +231,10 @@ export function ConversationScreen({ route, navigation }: any) {
     return (
       <View style={[styles.messageRow, isMe ? styles.rowRight : styles.rowLeft]}>
         {!isMe && (
-          <View style={[styles.avatarSmall, { backgroundColor: colors.surface }]}>
+          <View style={[styles.avatarSmall, {
+            backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
+            borderColor: isDark ? colors.glassBorder : colors.border,
+          }]}>
             <FlagEmoji countryCode={avatarCountryCode} size={18} />
           </View>
         )}
@@ -244,8 +243,12 @@ export function ConversationScreen({ route, navigation }: any) {
             style={[
               styles.bubble,
               isMe
-                ? [styles.bubbleRight, { backgroundColor: '#007AFF' }]
-                : [styles.bubbleLeft, { backgroundColor: colors.surface }],
+                ? [styles.bubbleRight, { backgroundColor: '#007AFF', shadowColor: '#007AFF' }]
+                : [styles.bubbleLeft, {
+                    backgroundColor: isDark ? colors.glass : colors.surface,
+                    borderColor: isDark ? colors.glassBorder : colors.border,
+                    shadowColor: colors.shadow,
+                  }],
             ]}
           >
             <Text style={[styles.primaryText, { color: isMe ? '#FFF' : colors.text }]}>
@@ -255,7 +258,7 @@ export function ConversationScreen({ route, navigation }: any) {
               <Text
                 style={[
                   styles.secondaryText,
-                  { color: isMe ? 'rgba(255,255,255,0.7)' : colors.textSecondary },
+                  { color: isMe ? 'rgba(255,255,255,0.75)' : colors.textSecondary },
                 ]}
               >
                 {secondaryText}
@@ -269,13 +272,19 @@ export function ConversationScreen({ route, navigation }: any) {
             ]}
           >
             <TouchableOpacity
-              style={[styles.actionBtn, { borderColor: colors.border }]}
+              style={[styles.actionBtn, {
+                borderColor: isDark ? colors.glassBorder : colors.border,
+                backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
+              }]}
               onPress={() => Speech.speak(speakText, { language: speakLang })}
             >
               <Ionicons name="play-outline" size={14} color={colors.textSecondary} />
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.actionBtn, { borderColor: colors.border }]}
+              style={[styles.actionBtn, {
+                borderColor: isDark ? colors.glassBorder : colors.border,
+                backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
+              }]}
               onPress={() => Clipboard.setString(speakText)}
             >
               <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />
@@ -283,7 +292,10 @@ export function ConversationScreen({ route, navigation }: any) {
           </View>
         </View>
         {isMe && (
-          <View style={[styles.avatarSmall, { backgroundColor: colors.surface }]}>
+          <View style={[styles.avatarSmall, {
+            backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
+            borderColor: isDark ? colors.glassBorder : colors.border,
+          }]}>
             <FlagEmoji countryCode={avatarCountryCode} size={18} />
           </View>
         )}
@@ -558,12 +570,18 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
   },
   messageContent: { maxWidth: '75%' },
   bubble: {
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
   },
   bubbleLeft: { borderBottomLeftRadius: 4 },
   bubbleRight: { borderBottomRightRadius: 4 },

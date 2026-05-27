@@ -100,19 +100,25 @@ export function HomeScreen({ navigation }: any) {
       {/* Full-screen background map */}
       <Image
         source={require('../../../assets/home.png')}
-        style={StyleSheet.absoluteFill}
+        style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
         resizeMode="cover"
       />
 
-      {/* Overlay — dark in dark mode, light-white in light mode */}
-      <View style={[styles.overlay, { backgroundColor: resolvedTheme === 'dark' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.72)' }]} />
+      {/* Overlay — dark in dark mode, light-transparent in light mode so bg image shows */}
+      <View style={[styles.overlay, { backgroundColor: resolvedTheme === 'dark' ? 'rgba(0,0,0,0.60)' : 'rgba(255,255,255,0.40)' }]} />
 
       {/* Header — top 30% of screen */}
       <View style={[styles.headerArea, { height: SCREEN_HEIGHT * 0.30, paddingTop: insets.top + 8 }]}>
         <View style={styles.headerRow}>
           <Image source={require('../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
           <TouchableOpacity
-            style={styles.avatar}
+            style={[
+              styles.avatar,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.08)',
+                borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.12)',
+              },
+            ]}
             onPress={() => navigation.navigate(Routes.Account)}
           >
             <Ionicons name="person" size={20} color={iconColor} />
@@ -122,11 +128,17 @@ export function HomeScreen({ navigation }: any) {
 
       {/* Glassmorphism language card */}
       <View style={styles.cardWrap}>
-        <View style={[styles.glassCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)' }]}>
+        <View style={[styles.glassCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.72)', borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.12)' }]}>
           {/* My language */}
           <Text style={[styles.cardLabel, { color: colors.text }]}>Select Your Language</Text>
           <TouchableOpacity
-            style={styles.pickerRow}
+            style={[
+              styles.pickerRow,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.04)',
+                borderColor: isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.10)',
+              },
+            ]}
             onPress={() => setShowMyLangPicker(true)}
             activeOpacity={0.8}
           >
@@ -146,7 +158,17 @@ export function HomeScreen({ navigation }: any) {
           {/* Swap — line runs full width, button masks the centre */}
           <View style={styles.swapRow}>
             <View style={[styles.swapLine, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }]} />
-            <TouchableOpacity style={styles.swapBtn} onPress={swapLanguages} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={[
+                styles.swapBtn,
+                {
+                  backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.85)',
+                  borderColor: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.15)',
+                },
+              ]}
+              onPress={swapLanguages}
+              activeOpacity={0.7}
+            >
               <Ionicons name="swap-vertical" size={15} color={iconColor} />
             </TouchableOpacity>
             <View style={[styles.swapLine, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }]} />
@@ -155,7 +177,13 @@ export function HomeScreen({ navigation }: any) {
           {/* Their language */}
           <Text style={[styles.cardLabel, { color: colors.text }]}>Select Next Person's Language</Text>
           <TouchableOpacity
-            style={styles.pickerRow}
+            style={[
+              styles.pickerRow,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.04)',
+                borderColor: isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.10)',
+              },
+            ]}
             onPress={() => setShowTheirLangPicker(true)}
             activeOpacity={0.8}
           >
@@ -187,45 +215,64 @@ export function HomeScreen({ navigation }: any) {
           </TouchableOpacity>
         ) : (
           <>
-            <TouchableOpacity
-              style={[styles.startBtn, starting && styles.startBtnDisabled]}
-              onPress={startNewConversation}
-              activeOpacity={0.85}
-              disabled={starting}
-            >
-              <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.startBtnText}>{starting ? 'Creating...' : 'New Conversation'}</Text>
-            </TouchableOpacity>
+            {/* Row of 3 primary actions */}
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={[styles.actionChip, { backgroundColor: '#007AFF' }]}
+                onPress={startNewConversation}
+                activeOpacity={0.85}
+                disabled={starting}
+              >
+                <Ionicons name="add-circle-outline" size={22} color="#FFFFFF" />
+                <Text style={styles.actionChipText}>{starting ? '...' : 'New'}</Text>
+              </TouchableOpacity>
 
+              <TouchableOpacity
+                style={[
+                  styles.actionChip,
+                  { backgroundColor: '#34C759' },
+                  (!myLanguage || !theirLanguage || starting) && styles.startBtnDisabled,
+                ]}
+                onPress={startFaceToFace}
+                activeOpacity={0.85}
+                disabled={!myLanguage || !theirLanguage || starting}
+              >
+                <Ionicons name="people" size={22} color="#FFFFFF" />
+                <Text style={styles.actionChipText}>Talk</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.actionChip,
+                  {
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.04)',
+                    borderWidth: 1.5,
+                    borderColor: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.15)',
+                  },
+                ]}
+                onPress={() => navigation.navigate(Routes.FindPerson)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="search-outline" size={22} color={iconColor} />
+                <Text style={[styles.actionChipText, { color: iconColor }]}>Find</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Join action — wider, below the row */}
             <TouchableOpacity
               style={[
-                styles.talkTogetherBtn,
-                (!myLanguage || !theirLanguage || starting) && styles.startBtnDisabled,
+                styles.actionChipWide,
+                {
+                  borderWidth: 1.5,
+                  borderColor: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.15)',
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)',
+                },
               ]}
-              onPress={startFaceToFace}
-              activeOpacity={0.85}
-              disabled={!myLanguage || !theirLanguage || starting}
-            >
-              <Ionicons name="people" size={18} color="#FFFFFF" />
-              <Text style={styles.startBtnText}>Talk Together</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.secondaryBtn}
-              onPress={() => navigation.navigate(Routes.FindPerson)}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="search-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.secondaryBtnText}>Find Someone</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.secondaryBtn}
               onPress={() => navigation.navigate(Routes.Join)}
               activeOpacity={0.85}
             >
-              <Ionicons name="enter-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.secondaryBtnText}>Join with Invite Code</Text>
+              <Ionicons name="enter-outline" size={18} color={iconColor} />
+              <Text style={[styles.actionChipWideText, { color: iconColor }]}>Join with Invite Code</Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => setShowActions(false)} style={styles.cancelBtn}>
@@ -238,7 +285,7 @@ export function HomeScreen({ navigation }: any) {
       {/* Recent conversations — hidden while action buttons are expanded to avoid layout overflow */}
       {recentConvos.length > 0 && !showActions && (
         <View style={styles.recentSection}>
-          <Text style={[styles.recentLabel, { color: colors.text }]}>Recent</Text>
+          <Text style={[styles.recentLabel, { color: colors.textSecondary }]}>Recent</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recentList}>
             {recentConvos.map((convo) => {
               const otherUid = convo.participants.find((p) => p !== user?.uid);
@@ -252,6 +299,10 @@ export function HomeScreen({ navigation }: any) {
                   key={convo.id}
                   style={[
                     styles.recentChip,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : colors.surface,
+                      borderColor: isDark ? 'rgba(255,255,255,0.20)' : colors.border,
+                    },
                     isWaiting && styles.recentChipWaiting,
                     convo.mode === 'faceToFace' && styles.recentChipFaceToFace,
                   ]}
@@ -287,8 +338,8 @@ export function HomeScreen({ navigation }: any) {
       )}
 
       {/* Ad banner — pinned above tab bar */}
-      <View style={styles.adBanner}>
-        <Text style={styles.adText}>Test Ad</Text>
+      <View style={[styles.adBanner, { backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : colors.surface, borderTopColor: isDark ? 'rgba(255,255,255,0.1)' : colors.border }]}>
+        <Text style={[styles.adText, { color: colors.textSecondary }]}>Test Ad</Text>
       </View>
 
       <LanguagePickerModal
@@ -338,11 +389,9 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.18)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
   },
 
   /* ── Glass card ── */
@@ -352,7 +401,6 @@ const styles = StyleSheet.create({
   glassCard: {
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
     padding: 16,
     gap: 8,
   },
@@ -366,10 +414,8 @@ const styles = StyleSheet.create({
   pickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
     paddingHorizontal: 14,
     paddingVertical: 12,
     gap: 20,
@@ -404,9 +450,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.55)',
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -435,43 +479,53 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 6,
   },
-  startBtnDisabled: { opacity: 0.7 },
+  startBtnDisabled: { opacity: 0.45 },
   startBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 
-  talkTogetherBtn: {
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#34C759',
+  actionRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    width: '92%',
+  },
+  actionChip: {
+    flex: 1,
+    height: 72,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    width: '84%',
-    gap: 8,
-    shadowColor: '#34C759',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 6,
+    gap: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  secondaryBtn: {
-    height: 46,
-    borderRadius: 23,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.45)',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+  actionChipText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  actionChipWide: {
     flexDirection: 'row',
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    width: '84%',
+    width: '92%',
     gap: 8,
   },
-  secondaryBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  actionChipWideText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
 
   cancelBtn: {
     paddingVertical: 6,
     alignItems: 'center',
   },
-  cancelText: { color: 'rgba(255,255,255,0.55)', fontSize: 13, fontWeight: '500' },
+  cancelText: { fontSize: 13, fontWeight: '500' },
 
   /* ── Recent conversations ── */
   recentSection: {
@@ -479,7 +533,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   recentLabel: {
-    color: 'rgba(255,255,255,0.5)',
     fontSize: 11,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -497,9 +550,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
   },
   recentChipWaiting: {
     borderColor: 'rgba(255,165,0,0.5)',
@@ -513,11 +564,9 @@ const styles = StyleSheet.create({
   /* ── Ad banner ── */
   adBanner: {
     height: 60,
-    backgroundColor: 'rgba(0,0,0,0.5)',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  adText: { color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '700' },
+  adText: { fontSize: 14, fontWeight: '700' },
 });

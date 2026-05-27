@@ -116,7 +116,7 @@ function SwipeableMessageRow({
 export function FaceToFaceScreen({ route, navigation }: any) {
   const { conversationId, langA, langB } = route.params;
   const { user } = useAuth();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
@@ -518,7 +518,10 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     const bubble = (
       <View style={[styles.messageRow, isPersonA ? styles.rowRight : styles.rowLeft]}>
         {!isPersonA && (
-          <View style={[styles.avatarSmall, { backgroundColor: colors.surface }]}>
+          <View style={[styles.avatarSmall, {
+            backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
+            borderColor: isDark ? colors.glassBorder : colors.border,
+          }]}>
             <FlagEmoji countryCode={langBInfo?.countryCode ?? 'BD'} size={18} />
           </View>
         )}
@@ -527,8 +530,12 @@ export function FaceToFaceScreen({ route, navigation }: any) {
             style={[
               styles.bubble,
               isPersonA
-                ? [styles.bubbleRight, { backgroundColor: '#007AFF' }]
-                : [styles.bubbleLeft, { backgroundColor: colors.surface }],
+                ? [styles.bubbleRight, { backgroundColor: '#007AFF', shadowColor: '#007AFF' }]
+                : [styles.bubbleLeft, {
+                    backgroundColor: isDark ? colors.glass : colors.surface,
+                    borderColor: isDark ? colors.glassBorder : colors.border,
+                    shadowColor: colors.shadow,
+                  }],
             ]}
           >
             <Text style={[styles.primaryText, { color: isPersonA ? '#FFF' : colors.text }]}>
@@ -538,7 +545,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
               <Text
                 style={[
                   styles.secondaryText,
-                  { color: isPersonA ? 'rgba(255,255,255,0.7)' : colors.textSecondary },
+                  { color: isPersonA ? 'rgba(255,255,255,0.75)' : colors.textSecondary },
                 ]}
               >
                 {item.translatedText}
@@ -552,13 +559,19 @@ export function FaceToFaceScreen({ route, navigation }: any) {
             ]}
           >
             <TouchableOpacity
-              style={[styles.actionBtn, { borderColor: colors.border }]}
+              style={[styles.actionBtn, {
+                borderColor: isDark ? colors.glassBorder : colors.border,
+                backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
+              }]}
               onPress={() => Speech.speak(item.translatedText, { language: item.targetLanguage })}
             >
               <Ionicons name="play-outline" size={14} color={colors.textSecondary} />
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.actionBtn, { borderColor: colors.border }]}
+              style={[styles.actionBtn, {
+                borderColor: isDark ? colors.glassBorder : colors.border,
+                backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
+              }]}
               onPress={() => Clipboard.setString(item.translatedText)}
             >
               <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />
@@ -566,7 +579,10 @@ export function FaceToFaceScreen({ route, navigation }: any) {
           </View>
         </View>
         {isPersonA && (
-          <View style={[styles.avatarSmall, { backgroundColor: colors.surface }]}>
+          <View style={[styles.avatarSmall, {
+            backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
+            borderColor: isDark ? colors.glassBorder : colors.border,
+          }]}>
             <FlagEmoji countryCode={speakerInfo?.countryCode ?? 'US'} size={18} />
           </View>
         )}
@@ -889,12 +905,18 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
   },
   messageContent: { maxWidth: '75%' },
   bubble: {
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
   },
   bubbleLeft: { borderBottomLeftRadius: 4 },
   bubbleRight: { borderBottomRightRadius: 4 },

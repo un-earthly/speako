@@ -358,6 +358,11 @@ export async function deleteAllMessagesInConversation(conversationId: string): P
   await Promise.all(deletes);
 }
 
+export async function deleteConversation(conversationId: string): Promise<void> {
+  await deleteAllMessagesInConversation(conversationId);
+  await deleteDoc(doc(db, 'conversations', conversationId));
+}
+
 export async function getUserMessages(userId: string): Promise<Message[]> {
   const q = query(
     collection(db, 'messages'),

@@ -22,6 +22,7 @@
     "expo-asset": "~55.0.9",
     "expo-audio": "^55.0.14",
     "expo-auth-session": "~55.0.16",
+    "expo-blur": "~55.0.14",
     "expo-constants": "^55.0.16",
     "expo-dev-client": "~55.0.34",
     "expo-device": "~55.0.17",
