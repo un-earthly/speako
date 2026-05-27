@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { FlagEmoji } from '../../components/common/FlagEmoji';
+import { AdBanner } from '../../components/common/AdBanner';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { LanguagePickerModal } from '../../components/common/LanguagePickerModal';
@@ -338,9 +339,7 @@ export function HomeScreen({ navigation }: any) {
       )}
 
       {/* Ad banner — pinned above tab bar */}
-      <View style={[styles.adBanner, { backgroundColor: isDark ? 'rgba(37, 37, 37, 0.5)' : colors.surface, borderTopColor: isDark ? 'rgba(255,255,255,0.1)' : colors.border }]}>
-        <Text style={[styles.adText, { color: colors.textSecondary }]}>Test Ad</Text>
-      </View>
+      <AdBanner />
 
       <LanguagePickerModal
         visible={showMyLangPicker}
