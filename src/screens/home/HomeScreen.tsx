@@ -22,8 +22,8 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export function HomeScreen({ navigation }: any) {
   const { user, updateUserProfile } = useAuth();
-  const { theme, colors } = useTheme();
-  const isDark = theme === 'dark';
+  const { theme, resolvedTheme, colors } = useTheme();
+  const isDark = resolvedTheme === 'dark';
   const iconColor = isDark ? '#FFFFFF' : '#1a1a1a';
   const iconColorMuted = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.45)';
   const [myLanguage, setMyLanguage] = useState(user?.preferredLanguage || '');
@@ -105,7 +105,7 @@ export function HomeScreen({ navigation }: any) {
       />
 
       {/* Overlay — dark in dark mode, light-white in light mode */}
-      <View style={[styles.overlay, { backgroundColor: theme === 'dark' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.72)' }]} />
+      <View style={[styles.overlay, { backgroundColor: resolvedTheme === 'dark' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.72)' }]} />
 
       {/* Header — top 30% of screen */}
       <View style={[styles.headerArea, { height: SCREEN_HEIGHT * 0.30, paddingTop: insets.top + 8 }]}>
@@ -418,7 +418,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     gap: 10,
-    backgroundColor: 'rgba(0,0,0,0.18)',
   },
 
   startBtn: {

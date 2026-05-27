@@ -5,10 +5,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 
 export function ChangeThemeScreen({ navigation }: any) {
-  const { theme, setTheme, colors } = useTheme();
+  const { theme, resolvedTheme, setTheme, colors } = useTheme();
   const insets = useSafeAreaInsets();
 
   const options = [
+    { key: 'system' as const, label: 'System Default', description: 'Automatically matches your device settings' },
     { key: 'light' as const, label: 'Light Mode', description: 'Standard color display with white background' },
     { key: 'dark' as const, label: 'Dark Mode', description: 'Standard color display with dark background' },
   ];
@@ -37,6 +38,11 @@ export function ChangeThemeScreen({ navigation }: any) {
             <View style={[styles.radio, { borderColor: theme === option.key ? '#007AFF' : colors.border }]}>
               {theme === option.key && <View style={styles.radioDot} />}
             </View>
+            {option.key === 'system' && (
+              <Text style={[styles.preview, { color: colors.textSecondary }]}>
+                Preview: {resolvedTheme === 'dark' ? 'Dark' : 'Light'}
+              </Text>
+            )}
           </TouchableOpacity>
         ))}
       </View>
@@ -79,5 +85,10 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     backgroundColor: '#007AFF',
+  },
+  preview: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginLeft: 8,
   },
 });

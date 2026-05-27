@@ -1,5 +1,6 @@
-import React from 'react';
-import { View, TextInput, Text, StyleSheet, type TextInputProps } from 'react-native';
+import React, { useState } from 'react';
+import { View, TextInput, Text, StyleSheet, TouchableOpacity, type TextInputProps } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 
 interface InputProps extends TextInputProps {
@@ -8,8 +9,10 @@ interface InputProps extends TextInputProps {
   icon?: React.ReactNode;
 }
 
-export function Input({ label, error, icon, style, ...props }: InputProps) {
+export function Input({ label, error, icon, style, secureTextEntry, ...props }: InputProps) {
   const { colors } = useTheme();
+  const [visible, setVisible] = useState(false);
+  const isPassword = secureTextEntry === true;
 
   return (
     <View style={styles.container}>
@@ -27,8 +30,14 @@ export function Input({ label, error, icon, style, ...props }: InputProps) {
         <TextInput
           placeholderTextColor={colors.textSecondary}
           style={[styles.input, { color: colors.text }, style]}
+          secureTextEntry={isPassword ? !visible : false}
           {...props}
         />
+        {isPassword && (
+          <TouchableOpacity onPress={() => setVisible((v) => !v)} activeOpacity={0.6} style={styles.eyeBtn}>
+            <Ionicons name={visible ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        )}
       </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
     </View>
@@ -55,6 +64,10 @@ const styles = StyleSheet.create({
   },
   icon: {
     marginRight: 10,
+  },
+  eyeBtn: {
+    padding: 4,
+    marginLeft: 6,
   },
   input: {
     flex: 1,

@@ -48,18 +48,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      console.log('[Auth] onAuthStateChanged fired. User:', fbUser?.uid ?? 'null');
       setFirebaseUser(fbUser);
       if (fbUser) {
-        const userDoc = await getDoc(doc(db, 'users', fbUser.uid));
-        if (userDoc.exists()) {
-          const data = userDoc.data() as AppUser;
-          if (data.isDiscoverable === undefined) {
-            await updateDoc(doc(db, 'users', fbUser.uid), { isDiscoverable: true });
-            data.isDiscoverable = true;
+        try {
+          const userDoc = await getDoc(doc(db, 'users', fbUser.uid));
+          console.log('[Auth] Firestore userDoc exists:', userDoc.exists());
+          if (userDoc.exists()) {
+            const data = userDoc.data() as AppUser;
+            if (data.isDiscoverable === undefined) {
+              await updateDoc(doc(db, 'users', fbUser.uid), { isDiscoverable: true });
+              data.isDiscoverable = true;
+            }
+            setUser(data);
+          } else {
+            const newUser: AppUser = {
+              uid: fbUser.uid,
+              email: fbUser.email,
+              displayName: fbUser.displayName,
+              photoURL: fbUser.photoURL,
+              preferredLanguage: 'en',
+              phone: null,
+              isDiscoverable: true,
+            };
+            await setDoc(doc(db, 'users', fbUser.uid), newUser);
+            setUser(newUser);
+            console.log('[Auth] Created new user doc in Firestore');
           }
-          setUser(data);
-        } else {
-          const newUser: AppUser = {
+          registerForPushNotifications(fbUser.uid).catch(() => {});
+        } catch (err: any) {
+          console.error('[Auth] Firestore getDoc/setDoc failed:', err.message);
+          // Fallback: create a minimal user object from Firebase auth so the app
+          // doesn't hang even if Firestore is unreachable
+          const fallbackUser: AppUser = {
             uid: fbUser.uid,
             email: fbUser.email,
             displayName: fbUser.displayName,
@@ -68,14 +89,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             phone: null,
             isDiscoverable: true,
           };
-          await setDoc(doc(db, 'users', fbUser.uid), newUser);
-          setUser(newUser);
+          setUser(fallbackUser);
         }
-        registerForPushNotifications(fbUser.uid).catch(() => {});
       } else {
         setUser(null);
       }
       setIsLoading(false);
+      console.log('[Auth] isLoading set to false. user:', fbUser?.uid ?? 'null');
     });
     return unsubscribe;
   }, []);

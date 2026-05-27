@@ -24,7 +24,7 @@ interface Section {
 
 export function AccountScreen({ navigation }: any) {
   const { user, logout } = useAuth();
-  const { theme, colors } = useTheme();
+  const { theme, resolvedTheme, colors } = useTheme();
   const preferredLangName = getLanguageByCode(user?.preferredLanguage || '')?.name || user?.preferredLanguage || 'Not set';
   const insets = useSafeAreaInsets();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -46,7 +46,7 @@ export function AccountScreen({ navigation }: any) {
       title: 'APPLICATION SETTING',
       items: [
         { label: 'Preferred Language', iconName: 'language-outline', value: preferredLangName, screen: Routes.ChangeLanguage },
-        { label: 'Theme', iconName: 'sunny-outline', value: theme === 'dark' ? 'Dark' : 'Light', screen: Routes.ChangeTheme },
+        { label: 'Theme', iconName: 'sunny-outline', value: theme === 'system' ? 'System' : (resolvedTheme === 'dark' ? 'Dark' : 'Light'), screen: Routes.ChangeTheme },
       ],
     },
     {

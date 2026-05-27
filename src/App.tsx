@@ -13,7 +13,7 @@ SplashScreen.preventAutoHideAsync();
 
 function RootNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
-  const { theme } = useTheme();
+  const { resolvedTheme } = useTheme();
   const [showSplash, setShowSplash] = useState(true);
 
   const handleSplashReady = useCallback(() => {
@@ -26,8 +26,8 @@ function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={theme === 'dark' ? DarkTheme : DefaultTheme}>
-      <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} />
+    <NavigationContainer theme={resolvedTheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <StatusBar barStyle={resolvedTheme === 'dark' ? 'light-content' : 'dark-content'} />
       {isAuthenticated ? <AppNavigator /> : <AuthNavigator />}
     </NavigationContainer>
   );

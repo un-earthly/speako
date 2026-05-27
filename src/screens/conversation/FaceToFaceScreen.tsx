@@ -147,6 +147,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   const recordingStartedAt = useRef(0);
   const canRecordAfter = useRef(0);
   const transcriptRef = useRef('');
+  const finalizedTranscriptRef = useRef('');
   const shouldFinalizeOnEndRef = useRef(false);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
@@ -206,8 +207,18 @@ export function FaceToFaceScreen({ route, navigation }: any) {
 
   useSpeechRecognitionEvent('result', (e) => {
     const text = e.results[0]?.transcript ?? '';
-    transcriptRef.current = text;
-    setVoicePartial(text);
+    console.log('[STT result]', { isFinal: e.isFinal, resultsCount: e.results.length, text, allResults: e.results.map((r: any) => r.transcript) });
+
+    if (e.isFinal) {
+      // Append finalized segment so continuous mode doesn't lose prior sentences
+      finalizedTranscriptRef.current = (finalizedTranscriptRef.current + ' ' + text).trim();
+      transcriptRef.current = finalizedTranscriptRef.current;
+    } else {
+      // Show accumulated finals + current partial
+      transcriptRef.current = (finalizedTranscriptRef.current + ' ' + text).trim();
+    }
+
+    setVoicePartial(transcriptRef.current);
   });
 
   useSpeechRecognitionEvent('end', async () => {
@@ -215,6 +226,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     shouldFinalizeOnEndRef.current = false;
 
     const text = transcriptRef.current.trim();
+    console.log('[STT end] finalize text:', JSON.stringify(text));
     transcriptRef.current = '';
     setVoicePartial('');
 
@@ -238,13 +250,16 @@ export function FaceToFaceScreen({ route, navigation }: any) {
       if (transcriptScript === chosenBase) {
         sourceLang = chosenLang;
         targetLang = activeSpeaker === 'langB' ? langA : langB;
+        console.log('[Translate] sending to translateText:', JSON.stringify(text), sourceLang, targetLang);
         translated = await translateText(text, sourceLang, targetLang);
       } else {
+        console.log('[Translate] sending to translateAutoDetect:', JSON.stringify(text), langA, langB);
         const result = await translateAutoDetect(text, langA, langB);
         sourceLang = result.sourceLang;
         targetLang = result.targetLang;
         translated = result.translated;
       }
+      console.log('[Translate] result:', JSON.stringify(translated), 'source:', sourceLang, 'target:', targetLang);
 
       addOptimisticMessage(text, translated, sourceLang, targetLang, 'voice');
       sendMessage(conversationId, user!.uid, text, translated, sourceLang, targetLang, 'voice').catch(
@@ -381,6 +396,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
       type,
       createdAt: Timestamp.now(),
     };
+    console.log('[Optimistic] adding message:', JSON.stringify(originalText), '→', JSON.stringify(translatedText));
     setOptimisticMessages((prev) => [...prev, optimistic]);
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
   };
@@ -390,6 +406,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     if (Date.now() < canRecordAfter.current) return;
 
     transcriptRef.current = '';
+    finalizedTranscriptRef.current = '';
     setVoicePartial('');
     setActiveSpeaker(speaker);
     setPhase('recording');
@@ -399,6 +416,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     ExpoSpeechRecognitionModule.start({
       lang: sttLang,
       interimResults: true,
+      continuous: true,
       volumeChangeEventOptions: { enabled: true, intervalMillis: 100 },
       addsPunctuation: true,
       recordingOptions: { persist: true },
@@ -465,7 +483,6 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const allMessages = useMemo(() => {
-    // Deduplicate optimistic messages that have already been confirmed by Firestore
     const dedupedOptimistic = optimisticMessages.filter((om) => {
       return !messages.some((fm) => {
         const timeMatch =
@@ -482,13 +499,13 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     });
 
     const sorted = [...messages, ...dedupedOptimistic].sort((a, b) => {
-      // Firestore serverTimestamp() is null locally until the server acks.
-      // Treat null as Infinity so pending writes sit at the bottom, not the top.
+
       const aTime = a.createdAt?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
       const bTime = b.createdAt?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
       if (aTime !== bTime) return aTime - bTime;
       return a.id.localeCompare(b.id);
     });
+    console.log('[Render] message count:', sorted.length, 'ids:', sorted.map((m) => m.id.slice(0, 8)));
 
     return sorted;
   }, [messages, optimisticMessages]);
