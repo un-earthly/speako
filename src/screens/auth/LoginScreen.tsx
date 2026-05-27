@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Routes } from '../../constants/routes';
+import { LoadingOverlay } from '../../components/common/LoadingOverlay';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 
 export function LoginScreen({ navigation }: any) {
@@ -38,9 +39,7 @@ export function LoginScreen({ navigation }: any) {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, paddingTop: insets.top }}>
       <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <View style={styles.illustration}>
-            <Text style={{ fontSize: 64 }}>🗣️</Text>
-          </View>
+          <Image source={require('../../assets/login-banner.png')} style={styles.banner} resizeMode="contain" />
           <Text style={[styles.title, { color: colors.text }]}>Welcome Back 👋</Text>
         </View>
 
@@ -67,7 +66,7 @@ export function LoginScreen({ navigation }: any) {
             <Text style={{ color: '#007AFF', fontWeight: '500' }}>Forgot Password?</Text>
           </TouchableOpacity>
 
-          <Button title="Log In" onPress={handleLogin} loading={loading} />
+          <Button title="Log In" onPress={handleLogin} loading={false} disabled={loading || googleLoading} />
 
           <View style={styles.divider}>
             <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
@@ -75,8 +74,10 @@ export function LoginScreen({ navigation }: any) {
             <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
           </View>
 
-          <Button title="Continue with Google" variant="secondary" onPress={() => promptAsync()} loading={googleLoading} />
+          <Button title="Continue with Google" variant="secondary" onPress={() => promptAsync()} loading={false} disabled={loading || googleLoading} />
         </View>
+
+        <LoadingOverlay visible={loading || googleLoading} message={googleLoading ? 'Logging in...' : 'Logging in...'} />
 
         <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
           <Text style={{ color: colors.textSecondary }}>Don't have an account? </Text>
@@ -100,8 +101,10 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     marginTop: 40,
   },
-  illustration: {
-    marginBottom: 16,
+  banner: {
+    width: 200,
+    height: 160,
+    marginBottom: 8,
   },
   title: {
     fontSize: 24,

@@ -96,11 +96,11 @@ export function HomeScreen({ navigation }: any) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingBottom: insets.bottom + 80 }]}>
       {/* Full-screen background map */}
       <Image
         source={require('../../../assets/home.png')}
-        style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
+        style={[StyleSheet.absoluteFill, { width: '100%', height: '30%', objectFit: 'cover' }]}
         resizeMode="cover"
       />
 
@@ -338,7 +338,7 @@ export function HomeScreen({ navigation }: any) {
       )}
 
       {/* Ad banner — pinned above tab bar */}
-      <View style={[styles.adBanner, { backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : colors.surface, borderTopColor: isDark ? 'rgba(255,255,255,0.1)' : colors.border }]}>
+      <View style={[styles.adBanner, { backgroundColor: isDark ? 'rgba(37, 37, 37, 0.5)' : colors.surface, borderTopColor: isDark ? 'rgba(255,255,255,0.1)' : colors.border }]}>
         <Text style={[styles.adText, { color: colors.textSecondary }]}>Test Ad</Text>
       </View>
 
@@ -567,6 +567,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 4
   },
   adText: { fontSize: 14, fontWeight: '700' },
 });

@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
-import { StatusBar } from 'react-native';
+import { StatusBar, StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -10,6 +11,10 @@ import { AuthNavigator } from './navigation/AuthNavigator';
 import { AppNavigator } from './navigation/AppNavigator';
 
 SplashScreen.preventAutoHideAsync();
+
+const styles = StyleSheet.create({
+  gestureRoot: { flex: 1 },
+});
 
 function RootNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -35,12 +40,14 @@ function RootNavigator() {
 
 export function App() {
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <ThemeProvider>
-          <RootNavigator />
-        </ThemeProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.gestureRoot}>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <ThemeProvider>
+            <RootNavigator />
+          </ThemeProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

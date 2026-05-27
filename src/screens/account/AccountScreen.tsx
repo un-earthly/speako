@@ -72,7 +72,7 @@ export function AccountScreen({ navigation }: any) {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 80 }]} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Account</Text>
@@ -80,11 +80,11 @@ export function AccountScreen({ navigation }: any) {
 
         {/* Profile card */}
         <View style={[styles.profileCard, {
-          backgroundColor: isDark ? colors.glass : colors.card,
-          borderColor: isDark ? colors.glassBorder : colors.border,
+          backgroundColor: colors.card,
+          borderColor: colors.border,
         }]}>
           <View style={[styles.avatarCircle, {
-            backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : colors.surfaceHighlight,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : '#E5E5EA',
           }]}>
             <Ionicons name="person" size={28} color={colors.textSecondary} />
           </View>
@@ -105,8 +105,8 @@ export function AccountScreen({ navigation }: any) {
               {section.title}
             </Text>
             <View style={[styles.card, {
-              backgroundColor: isDark ? colors.glass : colors.card,
-              borderColor: isDark ? colors.glassBorder : colors.border,
+              backgroundColor: colors.card,
+              borderColor: colors.border,
             }]}>
               {section.items.map((item, idx) => (
                 <TouchableOpacity
@@ -128,7 +128,7 @@ export function AccountScreen({ navigation }: any) {
                     {item.label}
                   </Text>
                   {item.value ? (
-                    <View style={[styles.valueBadge, { backgroundColor: colors.surface }]}>
+                    <View style={[styles.valueBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : '#F2F2F7' }]}>
                       <Text style={[styles.valueText, { color: colors.textSecondary }]}>
                         {item.value}
                       </Text>
@@ -145,7 +145,6 @@ export function AccountScreen({ navigation }: any) {
           </View>
         ))}
 
-        <View style={{ height: 32 }} />
       </ScrollView>
 
       {/* Logout confirm modal */}
@@ -186,15 +185,11 @@ const styles = StyleSheet.create({
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 20,
+    borderRadius: 12,
     padding: 16,
     marginBottom: 24,
     gap: 14,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   avatarCircle: {
     width: 52,
@@ -225,19 +220,15 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   card: {
-    borderRadius: 20,
+    borderRadius: 12,
     overflow: 'hidden',
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 13,
     gap: 12,
   },
   rowIcon: {
@@ -251,8 +242,8 @@ const styles = StyleSheet.create({
   },
   valueBadge: {
     paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingVertical: 4,
+    borderRadius: 10,
     marginRight: 4,
   },
   valueText: {
