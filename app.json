@@ -10,14 +10,14 @@
     "scheme": "speako",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.unbounded"
+      "bundleIdentifier": "com.champaius.speako"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#3381FF"
       },
-      "package": "com.unbounded"
+      "package": "com.champaius.speako"
     },
     "web": {
       "favicon": "./assets/favicon.png"

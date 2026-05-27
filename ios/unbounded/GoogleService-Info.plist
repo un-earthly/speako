@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>35824657921-jmgkbjtmp7dpj902lao3fo8eo44ia6gv.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.35824657921-jmgkbjtmp7dpj902lao3fo8eo44ia6gv</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>35824657921-c7amevvqp0g93gjrgpq6pjc02s14u997.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyAtexkSGnsCLmJ1OJLd5yQGaHXNh56HL0E</string>
+	<key>GCM_SENDER_ID</key>
+	<string>35824657921</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.champaius.speako</string>
+	<key>PROJECT_ID</key>
+	<string>speako-b701f</string>
+	<key>STORAGE_BUCKET</key>
+	<string>speako-b701f.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:35824657921:ios:dd7b8901cffcae42924200</string>
+</dict>
+</plist>

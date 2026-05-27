@@ -28,13 +28,19 @@
         <key>CFBundleURLSchemes</key>
         <array>
           <string>speako</string>
-          <string>com.unbounded</string>
+          <string>com.champaius.speako</string>
         </array>
       </dict>
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
           <string>exp+speako</string>
+        </array>
+      </dict>
+      <dict>
+        <key>CFBundleURLSchemes</key>
+        <array>
+          <string>com.googleusercontent.apps.35824657921-jmgkbjtmp7dpj902lao3fo8eo44ia6gv</string>
         </array>
       </dict>
     </array>

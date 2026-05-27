@@ -1,4 +1,4 @@
-package com.unbounded
+package com.champaius.speako
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

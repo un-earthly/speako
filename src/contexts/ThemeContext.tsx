@@ -12,7 +12,7 @@ interface ThemeContextValue {
   toggleTheme: () => void;
 }
 
-const THEME_STORAGE_KEY = '@unbounded/theme';
+const THEME_STORAGE_KEY = '@speako/theme';
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 

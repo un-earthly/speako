@@ -146,11 +146,13 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   const phaseRef = useRef<Phase>('idle');
   const recordingStartedAt = useRef(0);
   const canRecordAfter = useRef(0);
+  const transcriptRef = useRef('');
+  const shouldFinalizeOnEndRef = useRef(false);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
   // Pre-warm permissions so we don't async-block during the gesture
   useEffect(() => {
-    ExpoSpeechRecognitionModule.requestPermissionsAsync().catch(() => {});
+    ExpoSpeechRecognitionModule.requestPermissionsAsync().catch(() => { });
   }, []);
 
   // Subscribe to Firestore messages
@@ -161,26 +163,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     });
   }, [conversationId]);
 
-  // Remove optimistic messages once Firestore confirms them
-  useEffect(() => {
-    setOptimisticMessages((prev) => {
-      if (prev.length === 0) return prev;
-      return prev.filter((om) => {
-        return !messages.some((fm) => {
-          const timeMatch =
-            !fm.createdAt ||
-            !om.createdAt ||
-            Math.abs(fm.createdAt.toMillis() - om.createdAt.toMillis()) < 15000;
-          return (
-            timeMatch &&
-            fm.originalText === om.originalText &&
-            fm.senderId === om.senderId &&
-            fm.sourceLanguage === om.sourceLanguage
-          );
-        });
-      });
-    });
-  }, [messages]);
+  // (Optimistic deduplication moved into allMessages useMemo to avoid render flicker)
 
   useEffect(() => {
     return () => {
@@ -221,18 +204,21 @@ export function FaceToFaceScreen({ route, navigation }: any) {
 
   // ── Speech recognition events ──────────────────────────────────────────────
 
-  useSpeechRecognitionEvent('result', async (e) => {
+  useSpeechRecognitionEvent('result', (e) => {
     const text = e.results[0]?.transcript ?? '';
+    transcriptRef.current = text;
+    setVoicePartial(text);
+  });
 
-    if (!e.isFinal) {
-      setVoicePartial(text);
-      return;
-    }
+  useSpeechRecognitionEvent('end', async () => {
+    if (!shouldFinalizeOnEndRef.current) return;
+    shouldFinalizeOnEndRef.current = false;
 
+    const text = transcriptRef.current.trim();
+    transcriptRef.current = '';
     setVoicePartial('');
 
-    if (phaseRef.current !== 'recording') return;
-    if (!text.trim()) {
+    if (!text) {
       resetRecordingState();
       return;
     }
@@ -279,7 +265,22 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   });
 
   useSpeechRecognitionEvent('error', (e) => {
-    console.error('STT error:', e.error, e.message);
+    // 'aborted' is expected on quick taps — ignore it
+    if (e.error === 'aborted') return;
+
+    if (
+      e.error === 'network' ||
+      e.error === 'no-speech' ||
+      e.error === 'language-not-supported'
+    ) {
+      console.warn('STT warning:', e.error, e.message);
+    } else {
+      console.error('STT error:', e.error, e.message);
+    }
+
+    // Cooldown to avoid rapid retry loops after a failure
+    canRecordAfter.current = Date.now() + 600;
+    shouldFinalizeOnEndRef.current = false;
     resetRecordingState();
   });
 
@@ -319,11 +320,8 @@ export function FaceToFaceScreen({ route, navigation }: any) {
             canRecordAfter.current = Date.now() + 200;
             resetRecordingState();
           } else {
-            try {
-              ExpoSpeechRecognitionModule.stop();
-            } catch {
-              /* ignore */
-            }
+            shouldFinalizeOnEndRef.current = true;
+            ExpoSpeechRecognitionModule.stop();
           }
         }
         Animated.timing(panX, {
@@ -341,6 +339,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
             /* ignore */
           }
           canRecordAfter.current = Date.now() + 200;
+          shouldFinalizeOnEndRef.current = false;
           resetRecordingState();
         }
         Animated.timing(panX, {
@@ -390,43 +389,21 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     if (phaseRef.current !== 'idle') return;
     if (Date.now() < canRecordAfter.current) return;
 
+    transcriptRef.current = '';
     setVoicePartial('');
     setActiveSpeaker(speaker);
     setPhase('recording');
     phaseRef.current = 'recording';
     recordingStartedAt.current = Date.now();
 
-    try {
-      ExpoSpeechRecognitionModule.start({
-        lang: sttLang,
-        interimResults: true,
-        volumeChangeEventOptions: { enabled: true, intervalMillis: 100 },
-        addsPunctuation: true,
-        recordingOptions: { persist: true },
-      });
-    } catch (err) {
-      console.error('Start recording failed:', err);
-      resetRecordingState();
-    }
+    ExpoSpeechRecognitionModule.start({
+      lang: sttLang,
+      interimResults: true,
+      volumeChangeEventOptions: { enabled: true, intervalMillis: 100 },
+      addsPunctuation: true,
+      recordingOptions: { persist: true },
+    })
   };
-
-  const handleDeleteMessage = (messageId: string) => {
-    Alert.alert('Delete message', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          if (messageId.startsWith('opt-')) {
-            setOptimisticMessages((prev) => prev.filter((m) => m.id !== messageId));
-          } else {
-            deleteMessage(messageId).catch((err) => console.error('Delete failed:', err));
-          }
-        },
-      },
-    ]);
-  };
-
   const handleClearConversation = () => {
     Alert.alert('Clear conversation', 'Delete all messages in this chat?', [
       { text: 'Cancel', style: 'cancel' },
@@ -488,11 +465,32 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const allMessages = useMemo(() => {
-    return [...messages, ...optimisticMessages].sort((a, b) => {
-      const aTime = a.createdAt?.toMillis?.() ?? 0;
-      const bTime = b.createdAt?.toMillis?.() ?? 0;
-      return aTime - bTime;
+    // Deduplicate optimistic messages that have already been confirmed by Firestore
+    const dedupedOptimistic = optimisticMessages.filter((om) => {
+      return !messages.some((fm) => {
+        const timeMatch =
+          !fm.createdAt ||
+          !om.createdAt ||
+          Math.abs(fm.createdAt.toMillis() - om.createdAt.toMillis()) < 15000;
+        return (
+          timeMatch &&
+          fm.originalText === om.originalText &&
+          fm.senderId === om.senderId &&
+          fm.sourceLanguage === om.sourceLanguage
+        );
+      });
     });
+
+    const sorted = [...messages, ...dedupedOptimistic].sort((a, b) => {
+      // Firestore serverTimestamp() is null locally until the server acks.
+      // Treat null as Infinity so pending writes sit at the bottom, not the top.
+      const aTime = a.createdAt?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
+      const bTime = b.createdAt?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
+      if (aTime !== bTime) return aTime - bTime;
+      return a.id.localeCompare(b.id);
+    });
+
+    return sorted;
   }, [messages, optimisticMessages]);
 
   const renderMessage = ({ item }: { item: Message }) => {
@@ -559,9 +557,9 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     );
 
     return (
-      <SwipeableMessageRow onDelete={() => handleDeleteMessage(item.id)}>
+      <View style={{ marginBottom: 12 }}>
         {bubble}
-      </SwipeableMessageRow>
+      </View>
     );
   };
 
@@ -569,8 +567,8 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     activeSpeaker === 'langB'
       ? '#34C759'
       : activeSpeaker === 'langA'
-      ? '#007AFF'
-      : '#007AFF';
+        ? '#007AFF'
+        : '#007AFF';
 
   return (
     <KeyboardAvoidingView
@@ -682,6 +680,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
                 style={styles.modeToggle}
                 onPress={() => {
                   if (phaseRef.current === 'recording') {
+                    shouldFinalizeOnEndRef.current = false;
                     try {
                       ExpoSpeechRecognitionModule.stop();
                     } catch {

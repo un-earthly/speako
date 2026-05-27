@@ -1,42 +1,49 @@
 {
   "project_info": {
-    "project_number": "662747509252",
-    "project_id": "unbounded-4b73f",
-    "storage_bucket": "unbounded-4b73f.firebasestorage.app"
+    "project_number": "35824657921",
+    "project_id": "speako-b701f",
+    "storage_bucket": "speako-b701f.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:662747509252:android:93ed35ce4ca5493a5bfb51",
+        "mobilesdk_app_id": "1:35824657921:android:2baf40f66ba716fd924200",
         "android_client_info": {
-          "package_name": "com.unbounded"
+          "package_name": "com.champaius.speako"
         }
       },
       "oauth_client": [
         {
-          "client_id": "662747509252-mp1iruph3r84vf435m30hdt04gu325sf.apps.googleusercontent.com",
+          "client_id": "35824657921-iigvm6jom6l88fu6i24aelpp82c6smij.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.unbounded",
+            "package_name": "com.champaius.speako",
             "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
           }
         },
         {
-          "client_id": "662747509252-chveu1qg263g4ph50v55s7kdfjpuc08v.apps.googleusercontent.com",
+          "client_id": "35824657921-mscrvqfkjv88mh17cd3ou402fusg2d8n.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyBZsgLT2V-X3XPg9-9CWdn4n24Ezi3uGjM"
+          "current_key": "AIzaSyADWttEExKYBsaKotZ9JhR46IFy79CnOTY"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "662747509252-chveu1qg263g4ph50v55s7kdfjpuc08v.apps.googleusercontent.com",
+              "client_id": "35824657921-mscrvqfkjv88mh17cd3ou402fusg2d8n.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "35824657921-jmgkbjtmp7dpj902lao3fo8eo44ia6gv.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.champaius.speako"
+              }
             }
           ]
         }

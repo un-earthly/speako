@@ -1,4 +1,4 @@
-package com.unbounded
+package com.champaius.speako
 
 import android.app.Application
 import android.content.res.Configuration

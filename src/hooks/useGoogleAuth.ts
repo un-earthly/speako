@@ -4,7 +4,7 @@ import { GoogleAuthProvider } from 'firebase/auth';
 import { useAuth } from '../contexts/AuthContext';
 
 GoogleSignin.configure({
-  webClientId: '662747509252-chveu1qg263g4ph50v55s7kdfjpuc08v.apps.googleusercontent.com',
+  webClientId: '35824657921-mscrvqfkjv88mh17cd3ou402fusg2d8n.apps.googleusercontent.com',
 });
 
 export function useGoogleAuth() {
