@@ -30,7 +30,7 @@ import {
   type Message,
 } from '../../services/firestore';
 import { translateText, translateAutoDetect } from '../../services/translation';
-import { detectScript } from '../../services/language-detect';
+import { isSameDay, formatDateLabel } from '../../utils/date';
 import { Timestamp } from 'firebase/firestore';
 
 const ACTIVATION_THRESHOLD = 60;
@@ -53,63 +53,6 @@ function WordHighlight({ text, baseStyle }: { text: string; baseStyle: any }) {
       {stable}
       <Text style={{ color: '#007AFF', fontWeight: '700' }}>{latest}</Text>
     </Text>
-  );
-}
-
-function SwipeableMessageRow({
-  children,
-  onDelete,
-}: {
-  children: React.ReactNode;
-  onDelete: () => void;
-}) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const [isOpen, setIsOpen] = useState(false);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gs) => gs.dx < -8 && Math.abs(gs.dx) > Math.abs(gs.dy),
-      onPanResponderMove: (_, gs) => {
-        if (gs.dx < 0) translateX.setValue(Math.max(-80, gs.dx));
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dx < -50) {
-          Animated.spring(translateX, { toValue: -80, friction: 8, useNativeDriver: true }).start();
-          setIsOpen(true);
-        } else {
-          Animated.spring(translateX, { toValue: 0, friction: 8, useNativeDriver: true }).start();
-          setIsOpen(false);
-        }
-      },
-    }),
-  ).current;
-
-  return (
-    <View style={{ overflow: 'hidden', marginBottom: 12 }}>
-      {/* Delete background */}
-      <View style={styles.deleteBg}>
-        <TouchableOpacity onPress={onDelete} style={styles.deleteBtn}>
-          <Ionicons name="trash-outline" size={22} color="#FFF" />
-          <Text style={styles.deleteText}>Delete</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Row content */}
-      <Animated.View style={{ transform: [{ translateX }] }} {...panResponder.panHandlers}>
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={() => {
-            if (isOpen) {
-              Animated.spring(translateX, { toValue: 0, friction: 8, useNativeDriver: true }).start();
-              setIsOpen(false);
-            }
-          }}
-        >
-          {children}
-        </TouchableOpacity>
-      </Animated.View>
-    </View>
   );
 }
 
@@ -239,26 +182,12 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     setSending(true);
 
     try {
-      let sourceLang: string;
-      let targetLang: string;
-      let translated: string;
-
-      const chosenLang = activeSpeaker === 'langB' ? langB : langA;
-      const chosenBase = chosenLang.split('-')[0];
-      const transcriptScript = detectScript(text);
-
-      if (transcriptScript === chosenBase) {
-        sourceLang = chosenLang;
-        targetLang = activeSpeaker === 'langB' ? langA : langB;
-        console.log('[Translate] sending to translateText:', JSON.stringify(text), sourceLang, targetLang);
-        translated = await translateText(text, sourceLang, targetLang);
-      } else {
-        console.log('[Translate] sending to translateAutoDetect:', JSON.stringify(text), langA, langB);
-        const result = await translateAutoDetect(text, langA, langB);
-        sourceLang = result.sourceLang;
-        targetLang = result.targetLang;
-        translated = result.translated;
-      }
+      // Voice mode: always trust the side the user dragged to.
+      // The STT engine is already configured for that language.
+      const sourceLang = activeSpeaker === 'langB' ? langB : langA;
+      const targetLang = activeSpeaker === 'langB' ? langA : langB;
+      console.log('[Translate] sending to translateText:', JSON.stringify(text), sourceLang, targetLang);
+      const translated = await translateText(text, sourceLang, targetLang);
       console.log('[Translate] result:', JSON.stringify(translated), 'source:', sourceLang, 'target:', targetLang);
 
       addOptimisticMessage(text, translated, sourceLang, targetLang, 'voice');
@@ -510,7 +439,9 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     return sorted;
   }, [messages, optimisticMessages]);
 
-  const renderMessage = ({ item }: { item: Message }) => {
+  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
+    const prev = allMessages[index - 1];
+    const showDate = index === 0 || !isSameDay(prev?.createdAt ?? null, item.createdAt);
     const itemBase = item.sourceLanguage.split('-')[0].split('_')[0];
     const isPersonA = itemBase === langABase;
     const speakerInfo = isPersonA ? langAInfo : langBInfo;
@@ -591,6 +522,15 @@ export function FaceToFaceScreen({ route, navigation }: any) {
 
     return (
       <View style={{ marginBottom: 12 }}>
+        {showDate && (
+          <View style={styles.dateSeparator}>
+            <View style={[styles.dateLine, { backgroundColor: colors.border }]} />
+            <Text style={[styles.dateText, { color: colors.textSecondary }]}>
+              {formatDateLabel(item.createdAt)}
+            </Text>
+            <View style={[styles.dateLine, { backgroundColor: colors.border }]} />
+          </View>
+        )}
         {bubble}
       </View>
     );
@@ -1053,5 +993,22 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  dateSeparator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginVertical: 16,
+    paddingHorizontal: 16,
+  },
+  dateLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+  },
+  dateText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });

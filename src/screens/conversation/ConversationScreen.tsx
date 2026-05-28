@@ -33,6 +33,7 @@ import {
 import { translateText } from '../../services/translation';
 import { checkSpelling, applyCorrection, type SpellMatch } from '../../services/spellcheck';
 import { sendPushNotification } from '../../services/notifications';
+import { isSameDay, formatDateLabel } from '../../utils/date';
 import { useInterstitialAd } from '../../hooks/useInterstitialAd';
 import { useRewardedAd } from '../../hooks/useRewardedAd';
 import { POINTS, getUserPoints, deductPoints, rewardAdWatch } from '../../services/rewards';
@@ -258,7 +259,9 @@ export function ConversationScreen({ route, navigation }: any) {
     });
   };
 
-  const renderMessage = ({ item }: { item: Message }) => {
+  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
+    const prev = messages[index - 1];
+    const showDate = index === 0 || !isSameDay(prev?.createdAt ?? null, item.createdAt);
     const isMe = item.senderId === user?.uid;
     const primaryText = isMe ? item.originalText : item.translatedText;
     const secondaryText = isMe ? item.translatedText : item.originalText;
@@ -269,7 +272,17 @@ export function ConversationScreen({ route, navigation }: any) {
       : (otherLang?.countryCode ?? 'US');
 
     return (
-      <View style={[styles.messageRow, isMe ? styles.rowRight : styles.rowLeft]}>
+      <View>
+        {showDate && (
+          <View style={styles.dateSeparator}>
+            <View style={[styles.dateLine, { backgroundColor: colors.border }]} />
+            <Text style={[styles.dateText, { color: colors.textSecondary }]}>
+              {formatDateLabel(item.createdAt)}
+            </Text>
+            <View style={[styles.dateLine, { backgroundColor: colors.border }]} />
+          </View>
+        )}
+        <View style={[styles.messageRow, isMe ? styles.rowRight : styles.rowLeft]}>
         {!isMe && (
           <View style={[styles.avatarSmall, {
             backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
@@ -339,6 +352,7 @@ export function ConversationScreen({ route, navigation }: any) {
             <FlagEmoji countryCode={avatarCountryCode} size={18} />
           </View>
         )}
+      </View>
       </View>
     );
   };
@@ -786,6 +800,23 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  dateSeparator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginVertical: 16,
+    paddingHorizontal: 16,
+  },
+  dateLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+  },
+  dateText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   previewStrip: {
     flexDirection: 'row',
