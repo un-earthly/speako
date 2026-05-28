@@ -1,5 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Modal } from 'react-native';
+import { useTheme } from '../../contexts/ThemeContext';
+import { Colors } from '../../constants/colors';
 
 interface LoadingOverlayProps {
   visible: boolean;
@@ -7,12 +9,14 @@ interface LoadingOverlayProps {
 }
 
 export function LoadingOverlay({ visible, message }: LoadingOverlayProps) {
+  const { colors, isDark } = useTheme();
+
   return (
     <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.overlay}>
-        <View style={styles.card}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          {message ? <Text style={styles.message}>{message}</Text> : null}
+      <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          {message ? <Text style={[styles.message, { color: colors.text }]}>{message}</Text> : null}
         </View>
       </View>
     </Modal>
@@ -22,19 +26,16 @@ export function LoadingOverlay({ visible, message }: LoadingOverlayProps) {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   card: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     paddingVertical: 32,
     paddingHorizontal: 48,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
     shadowRadius: 24,
@@ -43,6 +44,5 @@ const styles = StyleSheet.create({
   message: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1C1C1E',
   },
 });
