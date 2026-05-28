@@ -3,9 +3,12 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
+import { AdBanner } from '../../components/common/AdBanner';
+import { useToast } from '../../contexts/ToastContext';
 
 export function ChangeThemeScreen({ navigation }: any) {
   const { theme, resolvedTheme, setTheme, colors } = useTheme();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
 
   const options = [
@@ -29,7 +32,10 @@ export function ChangeThemeScreen({ navigation }: any) {
           <TouchableOpacity
             key={option.key}
             style={[styles.item, { borderBottomColor: colors.border }]}
-            onPress={() => setTheme(option.key)}
+            onPress={() => {
+              setTheme(option.key);
+              showToast('Theme updated', 'success');
+            }}
           >
             <View style={styles.textCol}>
               <Text style={[styles.label, { color: colors.text }]}>{option.label}</Text>
@@ -46,6 +52,8 @@ export function ChangeThemeScreen({ navigation }: any) {
           </TouchableOpacity>
         ))}
       </View>
+      <AdBanner />
+      <View style={{ height: insets.bottom + 8 }} />
     </ScrollView>
   );
 }

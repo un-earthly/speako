@@ -8,12 +8,12 @@ import { FaceToFaceScreen } from '../screens/conversation/FaceToFaceScreen';
 import { WaitingScreen } from '../screens/conversation/WaitingScreen';
 import { JoinScreen } from '../screens/conversation/JoinScreen';
 import { FindPersonScreen } from '../screens/home/FindPersonScreen';
-import { PersonalInfoScreen } from '../screens/account/PersonalInfoScreen';
+import { EditProfileScreen } from '../screens/account/EditProfileScreen';
 import { ChangePasswordScreen } from '../screens/account/ChangePasswordScreen';
 import { ChangeLanguageScreen } from '../screens/account/ChangeLanguageScreen';
 import { ChangeThemeScreen } from '../screens/account/ChangeThemeScreen';
 import { SubscribeScreen } from '../screens/account/SubscribeScreen';
-import { SubscriptionManageScreen } from '../screens/account/SubscriptionManageScreen';
+import { ManageSubscriptionScreen } from '../screens/account/ManageSubscriptionScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -34,12 +34,12 @@ export function AppNavigator() {
       <Stack.Screen name={Routes.FindPerson} component={FindPersonScreen} />
       <Stack.Screen name={Routes.Conversation} component={ConversationScreen} />
       <Stack.Screen name={Routes.FaceToFace} component={FaceToFaceScreen} />
-      <Stack.Screen name={Routes.PersonalInfo} component={PersonalInfoScreen} />
+      <Stack.Screen name={Routes.PersonalInfo} component={EditProfileScreen} />
       <Stack.Screen name={Routes.ChangePassword} component={ChangePasswordScreen} />
       <Stack.Screen name={Routes.ChangeLanguage} component={ChangeLanguageScreen} />
       <Stack.Screen name={Routes.ChangeTheme} component={ChangeThemeScreen} />
       <Stack.Screen name={Routes.Subscribe} component={SubscribeScreen} />
-      <Stack.Screen name={Routes.SubscriptionManage} component={SubscriptionManageScreen} />
+      <Stack.Screen name={Routes.SubscriptionManage} component={ManageSubscriptionScreen} />
     </Stack.Navigator>
   );
 }

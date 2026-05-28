@@ -29,6 +29,13 @@
       font-weight: 600;
       font-size: 15px;
       display: inline-block;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-secondary {
+      background: transparent;
+      color: #007AFF;
+      margin-top: 12px;
     }
     .spinner {
       width: 20px; height: 20px;
@@ -42,22 +49,41 @@
   </style>
 </head>
 <body>
-  <div class="spinner"></div>
+  <div class="spinner" id="spinner"></div>
   <div class="icon">🎉</div>
   <h1>Payment Successful</h1>
-  <p>Thank you for supporting Speako! Opening the app now...</p>
-  <a class="btn" href="speako://payment/success">Open Speako</a>
+  <p id="message">Thank you for supporting Speako! Opening the app now...</p>
+  <a class="btn" id="openApp" href="speako://payment/success">Open Speako</a>
+  <a class="btn btn-secondary" id="storeLink" href="#" style="display:none;">Get the App</a>
 
   <script>
-    // Try to auto-redirect to the app after a brief delay
-    setTimeout(function() {
-      window.location.href = 'speako://payment/success';
-    }, 500);
+    (function() {
+      var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      var isAndroid = /Android/.test(navigator.userAgent);
+      var storeUrl = isIOS
+        ? 'https://apps.apple.com/app/speako'
+        : isAndroid
+          ? 'https://play.google.com/store/apps/details?id=com.speako.app'
+          : null;
 
-    // Fallback: if app doesn't open, show the button
-    setTimeout(function() {
-      document.querySelector('.spinner').style.display = 'none';
-    }, 2000);
+      var storeLink = document.getElementById('storeLink');
+      if (storeUrl) {
+        storeLink.href = storeUrl;
+        storeLink.style.display = 'inline-block';
+      }
+
+      // Try to open the app immediately
+      setTimeout(function() {
+        window.location.href = 'speako://payment/success';
+      }, 300);
+
+      // If still here after 3 seconds, user probably doesn't have the app
+      setTimeout(function() {
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('message').textContent =
+          "Tap 'Open Speako' to return to the app. If you don't have the app installed, tap 'Get the App'.";
+      }, 3000);
+    })();
   </script>
 </body>
 </html>

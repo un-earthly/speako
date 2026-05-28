@@ -13,6 +13,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { buildPaymentLinkUrl, STRIPE_PAYMENT_LINKS } from '../../constants/stripe-links';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../config/firebase';
 
 type PlanType = 'monthly' | 'yearly';
 type Currency = 'AED' | 'SAR' | 'USD';
@@ -46,17 +48,40 @@ export function SubscribeScreen({ navigation, route }: any) {
 
   // Handle return from Stripe Payment Link
   const paymentStatus = route.params?.status;
+  const [checkingPayment, setCheckingPayment] = useState(false);
+
   useEffect(() => {
     if (paymentStatus === 'success') {
-      Alert.alert(
-        'Payment Successful',
-        'Thank you! Your premium access will be activated shortly. If it does not appear within a few minutes, please restart the app.',
-        [{ text: 'OK' }]
-      );
+      setCheckingPayment(true);
+      // Poll Firestore for up to 10 seconds to see if webhook activated premium
+      let attempts = 0;
+      const interval = setInterval(async () => {
+        attempts++;
+        if (!user) return;
+        const snap = await getDoc(doc(db, 'users', user.uid));
+        const data = snap.data();
+        if (data?.subscriptionTier === 'premium') {
+          clearInterval(interval);
+          setCheckingPayment(false);
+          Alert.alert('Payment Successful', 'Your premium access is now active! 🎉', [
+            { text: 'Awesome!' },
+          ]);
+        } else if (attempts >= 20) {
+          // Stop polling after ~10 seconds
+          clearInterval(interval);
+          setCheckingPayment(false);
+          Alert.alert(
+            'Payment Processing',
+            'We are still processing your payment. Your premium access will appear within a few minutes. If not, please restart the app.',
+            [{ text: 'OK' }]
+          );
+        }
+      }, 500);
+      return () => clearInterval(interval);
     } else if (paymentStatus === 'cancel') {
       Alert.alert('Payment Cancelled', 'You can try again anytime.');
     }
-  }, [paymentStatus]);
+  }, [paymentStatus, user?.uid]);
 
   const openStripeCheckout = useCallback(async () => {
     if (!user) return;

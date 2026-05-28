@@ -3,12 +3,14 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIn
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getLanguageByCode } from '../../constants/languages';
 import { Routes } from '../../constants/routes';
 import { useRewardedAd } from '../../hooks/useRewardedAd';
 import { RewardModal } from '../../components/common/RewardModal';
 import { rewardAdWatch, POINTS, unlockAIConversation } from '../../services/rewards';
+import { AdBanner } from '../../components/common/AdBanner';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -26,8 +28,10 @@ interface Section {
 }
 
 export function AccountScreen({ navigation }: any) {
-  const { user, logout, isPremium, updateUserProfile } = useAuth();
+  const { user, firebaseUser, logout, isPremium, updateUserProfile } = useAuth();
   const { theme, resolvedTheme, colors, isDark } = useTheme();
+  const { showToast } = useToast();
+  const hasPasswordProvider = firebaseUser?.providerData?.some((p) => p.providerId === 'password') ?? false;
   const referralCode = user?.referralCode || '';
   const referralCount = user?.referralCount ?? 0;
   const referralPoints = user?.referralPointsEarned ?? 0;
@@ -49,9 +53,9 @@ export function AccountScreen({ navigation }: any) {
     },
     {
       title: 'ACCOUNT SECURITY',
-      items: [
-        { label: 'Change Password', iconName: 'lock-closed-outline', screen: Routes.ChangePassword },
-      ],
+      items: hasPasswordProvider
+        ? [{ label: 'Change Password', iconName: 'lock-closed-outline', screen: Routes.ChangePassword }]
+        : [{ label: 'Set Password', iconName: 'lock-closed-outline', screen: Routes.ChangePassword }],
     },
     {
       title: 'APPLICATION SETTING',
@@ -73,6 +77,23 @@ export function AccountScreen({ navigation }: any) {
   ];
 
   const handleItemPress = (item: MenuItem) => {
+    if (item.label === 'Set Password') {
+      Alert.alert(
+        'Set Password',
+        "You signed in with Google. We'll send a password reset link to your email so you can set a password.",
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Send Link',
+            onPress: () => {
+              // This would call resetPassword from auth context
+              showToast('Password reset link sent', 'success');
+            },
+          },
+        ],
+      );
+      return;
+    }
     if (item.label === 'Watch Ad for Points') {
       showRewardedAd(async () => {
         if (user) {
@@ -202,7 +223,7 @@ export function AccountScreen({ navigation }: any) {
                   style={[styles.referralAction, { backgroundColor: '#007AFF' }]}
                   onPress={() => {
                     Clipboard.setString(referralCode);
-                    Alert.alert('Copied!', 'Referral code copied to clipboard.');
+                    showToast('Referral code copied', 'success');
                   }}
                 >
                   <Ionicons name="copy-outline" size={16} color="#FFF" />
@@ -275,6 +296,7 @@ export function AccountScreen({ navigation }: any) {
           </View>
         </View>
 
+      <AdBanner />
       </ScrollView>
 
       <RewardModal

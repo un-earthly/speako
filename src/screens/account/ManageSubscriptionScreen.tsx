@@ -13,7 +13,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { downgradeToFree } from '../../services/subscription';
 
-export function SubscriptionManageScreen({ navigation }: any) {
+export function ManageSubscriptionScreen({ navigation }: any) {
   const { user, subscription, points, isPremium, updateUserProfile } = useAuth();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();

@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 
 import { HomeScreen } from '../screens/home/HomeScreen';
-import { HistoryScreen } from '../screens/account/HistoryScreen';
+import { ConversationHistoryScreen } from '../screens/account/ConversationHistoryScreen';
 import { AccountScreen } from '../screens/account/AccountScreen';
 import { useTheme } from '../contexts/ThemeContext';
 import { Routes } from '../constants/routes';
@@ -96,7 +96,7 @@ export function TabNavigator() {
       screenOptions={{ headerShown: false }}
     >
       <Tab.Screen name={Routes.Home} component={HomeScreen} />
-      <Tab.Screen name={Routes.History} component={HistoryScreen} />
+      <Tab.Screen name={Routes.History} component={ConversationHistoryScreen} />
       <Tab.Screen name={Routes.Account} component={AccountScreen} />
     </Tab.Navigator>
   );

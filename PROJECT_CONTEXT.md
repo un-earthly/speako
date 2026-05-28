@@ -1,19 +1,28 @@
-# Unbounded Translator — Project Context
+# Speako — Project Context
 
-> A real-time translation chatting app built with React Native (Expo) + Firebase.
+> A real-time translation chat app built with React Native (Expo) + Firebase.
 
 ---
 
 ## 1. App Overview
 
-**Unbounded** is a mobile app that enables two people who speak different languages to have a seamless conversation. Each person selects their language, and all messages are automatically translated in real-time.
+**Speako** enables people who speak different languages to communicate seamlessly. It supports two conversation modes:
+
+- **Remote Chat** — Two users chat via Firestore real-time sync, each on their own device
+- **Face-to-Face (Walkie-Talkie)** — Two people share one device, drag a mic slider toward their language and speak
 
 ### Core Features
-- **Auth Flow**: Splash → Sign Up / Log In / Forgot Password (with OTP) → Home
-- **Language Setup**: Select your language + the other person's language, with voice verification
-- **Real-time Chat**: Send text or voice messages, see translations instantly
-- **Account Management**: Profile, history, password, language preference, theme toggle, logout
-- **Ad Integration**: Banner ad placeholder on home screen
+
+| Feature | Description |
+|---------|-------------|
+| **Auth** | Email/Password, Google Sign-In |
+| **Translation** | Real-time text/voice translation via Google Translate, DeepL, MyMemory, LibreTranslate |
+| **AI Translation** | Premium feature using OpenAI for context-aware translations |
+| **Points & Rewards** | Free-tier users earn points by watching ads; points are spent per message |
+| **Referrals** | Users invite friends with referral codes; both get bonus points |
+| **Premium Subscription** | Monthly/Yearly plans via Stripe; removes ads, unlimited messages, AI mode |
+| **Ads** | Banner, Interstitial, Rewarded, and App-Open ads (Google Mobile Ads) |
+| **Dark Mode** | System-aware light/dark theme |
 
 ---
 
@@ -21,24 +30,22 @@
 
 | Layer | Technology |
 |-------|------------|
-| Framework | React Native (Expo SDK 55) |
+| Framework | React Native (Expo SDK 52) |
 | Navigation | React Navigation v7 (Native Stack + Bottom Tabs) |
 | State Management | React Context + Hooks |
-| Backend | Firebase (Auth, Firestore, Storage) |
-| Styling | React Native StyleSheet |
+| Auth | Firebase Authentication |
+| Database | Cloud Firestore |
+| Payments | Stripe (Payment Links + PaymentIntents) |
+| Ads | react-native-google-mobile-ads |
+| Translation | Google Translate (unofficial), DeepL, MyMemory, LibreTranslate, OpenAI |
 | Icons | `@expo/vector-icons` |
-| Audio | `expo-av` (recording + playback) |
-| Images | `expo-image-picker` (profile photos) |
+| Speech | `expo-speech` + `expo-speech-recognition` |
 
 ---
 
 ## 3. Firebase Configuration
 
-**Project ID**: `unbounded-4b73f`
-**Services Initialized**:
-- ✅ Authentication (Email/Password + Google Sign-In)
-- ✅ Cloud Firestore (location: `nam5`)
-- ✅ Cloud Storage
+**Project ID**: `speako-b701f`
 
 ### Firestore Collections
 
@@ -48,19 +55,52 @@ users/{userId}
   - email: string
   - displayName: string
   - photoURL: string
-  - preferredLanguage: string (e.g., "en", "bn", "ar")
+  - preferredLanguage: string
+  - phone: string | null
+  - isDiscoverable: boolean
+  - subscriptionTier: 'free' | 'premium'
+  - subscriptionExpiry: Timestamp | null
+  - points: number
+  - adStreak: number
+  - lastAdWatched: string (ISO)
+  - aiConversationEnabled: boolean
+  - aiConversationUnlocked: boolean
+  - referralCode: string
+  - referredBy: string | null
+  - referralCount: number
+  - referralPointsEarned: number
+  - lastLoginDate: string (YYYY-MM-DD)
   - createdAt: timestamp
 
+  subcollections:
+    payments/{paymentId}
+      - type: 'subscription' | 'one_time'
+      - plan: 'monthly' | 'yearly'
+      - currency: string
+      - amount: number (cents)
+      - stripePaymentIntentId: string
+      - createdAt: serverTimestamp
+
+    pointsHistory/{entryId}
+      - type: 'earned' | 'spent'
+      - amount: number
+      - reason: string
+      - balanceAfter: number
+      - conversationId: string | null
+      - createdAt: serverTimestamp
+
 conversations/{conversationId}
-  - participants: string[] (user UIDs)
+  - participants: string[]
   - participantLanguages: { [uid]: string }
+  - expectedOtherLanguage: string | null
+  - inviteCode: string | null
+  - status: 'waiting' | 'active'
+  - mode: 'faceToFace' | undefined
+  - createdBy: string
+  - messageCount: number
   - createdAt: timestamp
   - updatedAt: timestamp
-  - lastMessage: {
-      text: string
-      senderId: string
-      timestamp: timestamp
-    }
+  - lastMessage: { text, senderId, timestamp }
 
 messages/{messageId}
   - conversationId: string
@@ -69,220 +109,210 @@ messages/{messageId}
   - translatedText: string
   - sourceLanguage: string
   - targetLanguage: string
-  - type: "text" | "voice"
-  - audioURL: string (optional, for voice messages)
-  - createdAt: timestamp
+  - type: 'text' | 'voice'
+  - audioURL: string | null
+  - createdAt: serverTimestamp
 
-translations/{translationId}
-  - originalText: string
-  - translatedText: string
-  - sourceLanguage: string
-  - targetLanguage: string
-  - createdAt: timestamp
-  - userId: string
+users/_referralIndex
+  - codes: { [referralCode]: userId }
 ```
-
-### Storage Buckets
-- `users/{userId}/profile.jpg` — Profile photos
-- `voice-messages/{conversationId}/{messageId}.m4a` — Voice recordings
 
 ---
 
-## 4. App Architecture
-
-### Directory Structure
+## 4. Directory Structure
 
 ```
 src/
-├── App.tsx                    # Root component (theme, splash, linking)
-├── index.tsx                  # Entry point
-├── types.d.ts                 # Global type declarations
-├── assets/                    # Static images
+├── App.tsx                          # Root component (StripeProvider, linking, ErrorBoundary, ToastProvider)
+├── index.tsx                        # Entry point
+├── assets/                          # Static images
+├── components/
+│   ├── common/
+│   │   ├── AdBanner.tsx             # Google banner ad (hidden for premium)
+│   │   ├── Button.tsx
+│   │   ├── ErrorBoundary.tsx        # App-wide error boundary
+│   │   ├── FlagEmoji.tsx
+│   │   ├── Input.tsx
+│   │   ├── LanguagePickerModal.tsx
+│   │   ├── LoadingOverlay.tsx       # Dark-mode aware loading modal
+│   │   └── RewardModal.tsx          # Points reward animation modal
+│   └── chat/
+│       └── (no separate chat components — inline in screens)
 ├── config/
-│   └── firebase.ts            # Firebase app initialization
+│   └── firebase.ts                  # Firebase app initialization
 ├── contexts/
-│   ├── AuthContext.tsx        # Auth state & user management
-│   ├── ThemeContext.tsx       # Light/Dark theme toggle
-│   └── TranslationContext.tsx # Active translation session
+│   ├── AuthContext.tsx              # Auth state, user doc sync, subscription status
+│   ├── ThemeContext.tsx             # Light/Dark/System theme toggle
+│   └── ToastContext.tsx             # Global toast notification system
+├── hooks/
+│   ├── useAppOpenAd.ts              # App-open ad with point reward
+│   ├── useInterstitialAd.ts         # Interstitial ad (premium skip)
+│   └── useRewardedAd.ts             # Rewarded ad for points
 ├── navigation/
-│   ├── index.tsx              # Root navigator (Auth + App stacks)
-│   ├── AuthNavigator.tsx      # Auth flow screens
-│   └── AppNavigator.tsx       # Main app tabs + modals
+│   ├── AuthNavigator.tsx            # Auth flow stack
+│   ├── AppNavigator.tsx             # Main app stack (tabs + overlays)
+│   └── TabNavigator.tsx             # Bottom tabs (Home, History, Account)
 ├── screens/
 │   ├── auth/
 │   │   ├── SplashScreen.tsx
 │   │   ├── LoginScreen.tsx
 │   │   ├── SignUpScreen.tsx
-│   │   ├── ForgotPasswordScreen.tsx
-│   │   └── OTPScreen.tsx
+│   │   └── ForgotPasswordScreen.tsx
 │   ├── home/
-│   │   └── HomeScreen.tsx
+│   │   ├── HomeScreen.tsx           # Recent conversations, quick actions
+│   │   ├── FindPersonScreen.tsx     # Search by email/phone, start chat
+│   │   └── VoiceVerificationScreen.tsx
 │   ├── conversation/
-│   │   └── ConversationScreen.tsx
+│   │   ├── ConversationScreen.tsx   # Remote 1-to-1 chat (text/voice, points, ads)
+│   │   ├── FaceToFaceScreen.tsx     # Walkie-talkie slider mode
+│   │   ├── JoinScreen.tsx           # Enter invite code
+│   │   └── WaitingScreen.tsx        # Host waiting room
 │   └── account/
-│       ├── AccountScreen.tsx
-│       ├── PersonalInfoScreen.tsx
-│       ├── HistoryScreen.tsx
+│       ├── AccountScreen.tsx        # Profile, menu, referral, AI toggle
+│       ├── EditProfileScreen.tsx    # Edit name, phone, discoverable
+│       ├── ConversationHistoryScreen.tsx  # Conversation list, swipe-to-delete
 │       ├── ChangePasswordScreen.tsx
 │       ├── ChangeLanguageScreen.tsx
-│       └── ChangeThemeScreen.tsx
-├── components/
-│   ├── common/                # Reusable UI components
-│   │   ├── Button.tsx
-│   │   ├── Input.tsx
-│   │   ├── LanguagePicker.tsx
-│   │   └── Avatar.tsx
-│   └── chat/                  # Chat-specific components
-│       ├── MessageBubble.tsx
-│       ├── ChatInput.tsx
-│       └── VoiceRecorder.tsx
-├── hooks/
-│   ├── useAuth.ts
-│   ├── useFirestore.ts
-│   └── useStorage.ts
+│       ├── ChangeThemeScreen.tsx
+│       ├── SubscribeScreen.tsx      # Stripe payment link checkout
+│       └── ManageSubscriptionScreen.tsx   # View/cancel premium
 ├── services/
-│   ├── auth.ts
-│   ├── firestore.ts
-│   ├── storage.ts
-│   └── translation.ts         # Translation API integration
+│   ├── firestore.ts                 # CRUD + subscriptions for conversations/messages
+│   ├── translation.ts               # Multi-backend translation with fallback chain
+│   ├── ai-translation.ts            # OpenAI translation
+│   ├── rewards.ts                   # Points economy (earn/spend/history)
+│   ├── referral.ts                  # Referral code generation & processing
+│   ├── subscription.ts              # Premium status check
+│   ├── stripe-payment.ts            # Client-side PaymentIntent via Firebase function
+│   ├── language-detect.ts           # Fast script-based language detection
+│   ├── spellcheck.ts                # LanguageTool integration
+│   └── notifications.ts             # Push notification setup
 ├── constants/
-│   ├── languages.ts           # Supported languages list
-│   ├── colors.ts              # Theme colors
-│   └── routes.ts              # Route names
+│   ├── ads.ts                       # Ad unit IDs
+│   ├── colors.ts                    # Theme colors (light + dark palettes)
+│   ├── languages.ts                 # Supported languages list
+│   ├── routes.ts                    # Route name constants
+│   └── stripe-links.ts              # Stripe Payment Link URLs
 └── utils/
-    ├── validators.ts          # Form validation
-    └── formatters.ts          # Date/text formatting
+    ├── date.ts                      # Date formatting, isSameDay
+    └── points.ts                    # Tiered message cost calculator
 ```
 
-### Navigation Flow
+---
+
+## 5. Navigation Flow
 
 ```
 Auth Stack (not authenticated)
 ├── SplashScreen
 ├── LoginScreen
 ├── SignUpScreen
-├── ForgotPasswordScreen
-└── OTPScreen
+└── ForgotPasswordScreen
 
 App Stack (authenticated)
-├── MainTabs
+├── Tabs
 │   ├── HomeTab (HomeScreen)
+│   │   └── pushes: VoiceVerification, FindPerson, Waiting, Join,
+│   │                Conversation, FaceToFace
+│   ├── HistoryTab (ConversationHistoryScreen)
+│   │   └── pushes: Conversation, FaceToFace, Waiting
 │   └── AccountTab (AccountScreen)
-├── ConversationScreen (modal/push)
-├── PersonalInfoScreen
-├── HistoryScreen
-├── ChangePasswordScreen
-├── ChangeLanguageScreen
-└── ChangeThemeScreen
+│       └── pushes: EditProfile, ChangePassword, ChangeLanguage,
+│                    ChangeTheme, Subscribe, ManageSubscription
+└── Overlay Screens (full-screen over tabs)
+    ├── ConversationScreen
+    ├── FaceToFaceScreen
+    ├── WaitingScreen
+    ├── JoinScreen
+    └── VoiceVerificationScreen
 ```
 
 ---
 
-## 5. Design System (from Figma)
+## 6. Points & Pricing Economy
 
-### Colors
-- **Primary Blue**: `#007AFF` (buttons, active states)
-- **Background Light**: `#FFFFFF`
-- **Background Dark**: `#1C1C1E`
-- **Surface Light**: `#F2F2F7`
-- **Surface Dark**: `#2C2C2E`
-- **Text Primary**: `#000000` (light) / `#FFFFFF` (dark)
-- **Text Secondary**: `#8E8E93`
-- **Success Green**: `#34C759`
-- **Danger Red**: `#FF3B30`
+### Earning Points
+| Action | Points |
+|--------|--------|
+| Welcome bonus | 100 |
+| Daily login | 10 |
+| Watch startup ad | 25 |
+| Watch rewarded ad | 50 + streak bonus (up to 150) |
+| Refer a friend | 200 |
+| Referred signup | 50 |
 
-### Typography
-- **Headings**: SF Pro Display / System Bold, 20–28px
-- **Body**: SF Pro Text / System Regular, 16px
-- **Captions**: 12–14px, secondary color
+### Spending Points (per message)
+| Messages Sent | Cost |
+|---------------|------|
+| 1–10 | 5 pts |
+| 11–25 | 8 pts |
+| 26–50 | 12 pts |
+| 51+ | 20 pts |
 
-### Spacing
-- Base unit: 8px
-- Screen padding: 16–20px
-- Card border radius: 12px
-- Button border radius: 24px (pill shape)
+Premium users pay **0 points** for unlimited messages.
 
 ---
 
-## 6. Supported Languages
+## 7. Ad Strategy
 
-Based on the Figma screens, supported languages include:
-- English (en)
-- Bangla / Bengali (bn)
-- Arabic (ar)
-- Bahasa Indonesia (id)
-- Simplified Chinese (zh)
-- Korean (ko)
-- Japanese (ja)
-- Albanian (sq)
-- Amharic (am)
-- Armenian (hy)
-- Azerbaijani (az)
-- Belarusian (be)
-- Bulgarian (bg)
+| Ad Type | Placement | Reward |
+|---------|-----------|--------|
+| **Banner** | Home, History, Account, FindPerson, Conversation, FaceToFace, Settings screens | None |
+| **App Open** | Cold start | 25 pts |
+| **Interstitial** | Start conversation, leave conversation, delete conversation | None |
+| **Rewarded** | Explicit "Watch Ad for Points" button, AI unlock, low-points banner | 50–150 pts |
 
-*(Expandable list stored in `constants/languages.ts`)*
+All ads are hidden for premium users.
 
 ---
 
-## 7. Key Behaviors
+## 8. Payment Flow
 
-### Auth
-- Sign up with email + password
-- Log in with email + password
-- Social login: Google, Apple
-- Forgot password flow: Email → OTP → Reset → Success
-- Persistent session via Firebase Auth state listener
-
-### Home / Translation Setup
-- Dropdown selectors for "Your Language" and "Other Person's Language"
-- After selection, show voice verification prompt
-- Microphone button to record a test phrase
-- "Start Conversation" button creates a new Firestore `conversation` doc
-
-### Conversation
-- Real-time message sync via Firestore `onSnapshot`
-- Messages show:
-  - Sender avatar
-  - Original text
-  - Translated text below
-  - Copy icon
-  - Audio play icon (for voice messages)
-- Input bar: text keyboard + voice toggle + send button
-- Language flags shown at top for both participants
-
-### Account
-- Profile section with avatar, name, email
-- Navigation to: Personal Info, History, Change Password
-- App settings: Preferred Language, Theme
-- Logout with confirmation modal
+```
+User taps Subscribe
+  → Select plan (monthly/yearly) + currency (AED/SAR/USD)
+  → Open Stripe Payment Link with client_reference_id=uid
+  → Stripe hosted checkout
+      ├─ Success → redirect to /payment/success.html
+      │            → deep-link speako://payment/success
+      │            → SubscribeScreen polls Firestore for 10s
+      │            → Webhook (if configured) auto-activates premium
+      ├─ Cancel  → redirect to /payment/cancel.html
+      └─ Error   → redirect to /payment/error.html
+```
 
 ---
 
-## 8. Translation Strategy
+## 9. Key Behaviors
 
-For MVP, use a cloud translation API (e.g., Google Cloud Translation API, DeepL, or LibreTranslate). In production, this can be swapped for a custom backend or Firebase Extension.
+### Conversation Modes
+- **Remote**: Created via invite code or direct search. Two users, two devices. Uses `ConversationScreen`.
+- **Face-to-Face**: Created via "Talk" button on Home. One user, one device, two languages. Uses `FaceToFaceScreen` with drag-to-record slider.
 
-### Flow
-1. User sends message in Language A
-2. App calls translation service: A → B
-3. Stores both `originalText` and `translatedText` in Firestore
-4. Other user sees message in Language B (with original available)
+### Translation Flow
+1. User sends message (or speaks)
+2. Source language is determined (explicit for remote, active-speaker side for face-to-face)
+3. `translateText()` tries backends in order: AI (premium) → DeepL → Google → MyMemory → LibreTranslate
+4. Both `originalText` and `translatedText` stored in Firestore
+5. Recipient sees `translatedText` as primary, `originalText` as secondary
 
----
-
-## 9. Next Steps
-
-1. ✅ Firebase project initialized and deployed
-2. ⬜ Install dependencies (`firebase`, `@expo/vector-icons`, `expo-av`, etc.)
-3. ⬜ Set up Firebase config in app (`src/config/firebase.ts`)
-4. ⬜ Implement AuthContext + Auth screens
-5. ⬜ Implement Home screen with language selection
-6. ⬜ Implement Conversation screen with Firestore sync
-7. ⬜ Implement Account screens
-8. ⬜ Add theme support (light/dark)
-9. ⬜ Polish UI to match Figma
+### Message Cost Deduction
+- Both `ConversationScreen` and `FaceToFaceScreen` deduct points per message
+- Cost increases with conversation length (tiered pricing)
+- Deducted via Firestore transaction with audit trail to `pointsHistory`
 
 ---
 
-*Last updated: 2026-05-07*
+## 10. Environment Variables
+
+```
+EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
+```
+
+**Stripe secret key is NOT in the client.** It lives in:
+- `functions/src/index.ts` (Firebase Functions config)
+- `supabase/functions/*/index.ts` (Supabase edge functions)
+
+---
+
+*Last updated: 2026-05-29*

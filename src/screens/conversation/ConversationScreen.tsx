@@ -36,6 +36,7 @@ import { sendPushNotification } from '../../services/notifications';
 import { isSameDay, formatDateLabel } from '../../utils/date';
 import { useInterstitialAd } from '../../hooks/useInterstitialAd';
 import { useRewardedAd } from '../../hooks/useRewardedAd';
+import { AdBanner } from '../../components/common/AdBanner';
 import { POINTS, getUserPoints, deductPoints, rewardAdWatch } from '../../services/rewards';
 import { getMessageCost } from '../../utils/points';
 
@@ -516,6 +517,8 @@ export function ConversationScreen({ route, navigation }: any) {
             </TouchableOpacity>
           </View>
         )}
+
+        <AdBanner />
 
         {/* AI toggle / Premium upsell */}
         {aiModeEnabled ? (

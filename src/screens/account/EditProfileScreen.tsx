@@ -15,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../../components/common/Button';
+import { AdBanner } from '../../components/common/AdBanner';
+import { useToast } from '../../contexts/ToastContext';
 
 function FloatingInput({
   label,
@@ -70,9 +72,10 @@ const floatingStyles = StyleSheet.create({
   },
 });
 
-export function PersonalInfoScreen({ navigation }: any) {
+export function EditProfileScreen({ navigation }: any) {
   const { user, updateUserProfile } = useAuth();
   const { colors } = useTheme();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const [firstName, setFirstName] = useState(user?.displayName?.split(' ')[0] || '');
   const [lastName, setLastName] = useState(user?.displayName?.split(' ').slice(1).join(' ') || '');
@@ -101,6 +104,7 @@ export function PersonalInfoScreen({ navigation }: any) {
       isDiscoverable,
     });
     setLoading(false);
+    showToast('Profile updated', 'success');
     navigation.goBack();
   };
 
@@ -176,6 +180,7 @@ export function PersonalInfoScreen({ navigation }: any) {
         </View>
       </ScrollView>
 
+      <AdBanner />
       {/* Fixed save button */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
         <Button title="Save Information" onPress={handleSave} loading={loading} />

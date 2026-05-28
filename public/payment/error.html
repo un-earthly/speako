@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Payment Cancelled — Speako</title>
+  <title>Payment Failed — Speako</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -21,7 +21,7 @@
     h1 { color: #1a1a1a; font-size: 22px; margin: 0 0 8px; }
     p { color: #666; font-size: 15px; line-height: 1.5; max-width: 320px; margin: 0 0 24px; }
     .btn {
-      background: #8E8E93;
+      background: #FF3B30;
       color: #fff;
       padding: 14px 28px;
       border-radius: 24px;
@@ -35,23 +35,22 @@
       color: #007AFF;
       margin-top: 12px;
     }
-    .spinner {
-      width: 20px; height: 20px;
-      border: 2px solid #8E8E93;
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-bottom: 16px;
+    .error-code {
+      font-family: monospace;
+      background: #eee;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #666;
+      margin-top: 8px;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
-  <div class="spinner" id="spinner"></div>
-  <div class="icon">👋</div>
-  <h1>Payment Cancelled</h1>
-  <p id="message">No worries — you can upgrade anytime from the app.</p>
-  <a class="btn" id="openApp" href="speako://payment/cancel">Back to Speako</a>
+  <div class="icon">😕</div>
+  <h1>Payment Failed</h1>
+  <p>We couldn't process your payment. Please check your card details and try again.</p>
+  <a class="btn" href="speako://payment/error">Back to Speako</a>
   <a class="btn btn-secondary" id="storeLink" href="#" style="display:none;">Get the App</a>
 
   <script>
@@ -71,12 +70,8 @@
       }
 
       setTimeout(function() {
-        window.location.href = 'speako://payment/cancel';
+        window.location.href = 'speako://payment/error';
       }, 300);
-
-      setTimeout(function() {
-        document.getElementById('spinner').style.display = 'none';
-      }, 2000);
     })();
   </script>
 </body>

@@ -35,6 +35,8 @@ import { translateText, translateAutoDetect } from '../../services/translation';
 import { isSameDay, formatDateLabel } from '../../utils/date';
 import { getMessageCost } from '../../utils/points';
 import { POINTS, deductPoints, getUserPoints, rewardAdWatch } from '../../services/rewards';
+import { useRewardedAd } from '../../hooks/useRewardedAd';
+import { AdBanner } from '../../components/common/AdBanner';
 import { Timestamp } from 'firebase/firestore';
 
 const ACTIVATION_THRESHOLD = 60;
@@ -420,6 +422,17 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     }, 900);
   };
 
+  const { showAd: showRewardedAd } = useRewardedAd();
+
+  const handleWatchAdForPoints = async () => {
+    if (!user) return;
+    showRewardedAd(async () => {
+      const result = await rewardAdWatch(user.uid);
+      setUserPoints(result.newTotal);
+      setShowPointsBanner(false);
+    });
+  };
+
   const handleSend = async () => {
     const text = inputText.trim();
     if (!text || !user || sending) return;
@@ -684,6 +697,30 @@ export function FaceToFaceScreen({ route, navigation }: any) {
                 {translationPreview}
               </Text>
             )}
+          </View>
+        )}
+
+        <AdBanner />
+
+        {/* Cost indicator */}
+        {!isPremium && (
+          <View style={[styles.costIndicator, { borderTopColor: colors.border }]}>
+            <Text style={[styles.costIndicatorText, { color: colors.textSecondary }]}>
+              {`Next message costs ${getMessageCost(conversation?.messageCount ?? messages.length)} points`}
+            </Text>
+          </View>
+        )}
+
+        {/* Insufficient points banner */}
+        {showPointsBanner && (
+          <View style={[styles.pointsBanner, { backgroundColor: isDark ? 'rgba(255,59,48,0.15)' : '#FFEBEE' }]}>
+            <Ionicons name="flash" size={14} color="#FF3B30" />
+            <Text style={[styles.pointsBannerText, { color: '#FF3B30' }]}>
+              Need {getMessageCost(conversation?.messageCount ?? messages.length)} points to translate
+            </Text>
+            <TouchableOpacity onPress={handleWatchAdForPoints} style={styles.pointsBannerBtn}>
+              <Text style={styles.pointsBannerBtnText}>Watch Ad +{POINTS.WATCH_AD_BASE}</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -1058,5 +1095,41 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  costIndicator: {
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+  },
+  costIndicatorText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  pointsBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  pointsBannerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+    marginLeft: 6,
+  },
+  pointsBannerBtn: {
+    backgroundColor: '#FF3B30',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  pointsBannerBtnText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

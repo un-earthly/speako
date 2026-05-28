@@ -23,6 +23,7 @@ import {
   type Conversation,
 } from '../../services/firestore';
 import { Routes } from '../../constants/routes';
+import { useToast } from '../../contexts/ToastContext';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -49,9 +50,10 @@ function DeleteAction() {
   );
 }
 
-export function HistoryScreen({ navigation }: any) {
+export function ConversationHistoryScreen({ navigation }: any) {
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,7 +92,14 @@ export function HistoryScreen({ navigation }: any) {
 
   const handleOpen = (convo: Conversation) => {
     const myLangCode = (user?.uid && convo.participantLanguages[user.uid]) || 'en';
-    if (convo.status === 'waiting') {
+    if (convo.mode === 'faceToFace') {
+      const otherLangCode = convo.expectedOtherLanguage || 'en';
+      navigation.navigate(Routes.FaceToFace, {
+        conversationId: convo.id,
+        langA: myLangCode,
+        langB: otherLangCode,
+      });
+    } else if (convo.status === 'waiting') {
       navigation.navigate(Routes.Waiting, {
         conversationId: convo.id,
         inviteCode: convo.inviteCode,
@@ -111,8 +120,10 @@ export function HistoryScreen({ navigation }: any) {
           onPress: async () => {
             try {
               await deleteConversation(convo.id);
+              showToast('Conversation deleted', 'success');
             } catch (err) {
               console.error('Delete failed:', err);
+              showToast('Failed to delete conversation', 'error');
             }
           },
         },

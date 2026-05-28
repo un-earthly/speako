@@ -7,6 +7,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
+import { ToastProvider } from './contexts/ToastContext';
 import { useAppOpenAd } from './hooks/useAppOpenAd';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { SplashScreen as CustomSplash } from './screens/auth/SplashScreen';
@@ -87,7 +88,9 @@ export function App() {
           <SafeAreaProvider>
             <AuthProvider>
               <ThemeProvider>
-                <RootNavigator />
+                <ToastProvider>
+                  <RootNavigator />
+                </ToastProvider>
               </ThemeProvider>
             </AuthProvider>
           </SafeAreaProvider>

@@ -6,15 +6,19 @@ import { FlagEmoji } from '../../components/common/FlagEmoji';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { LANGUAGES } from '../../constants/languages';
+import { AdBanner } from '../../components/common/AdBanner';
+import { useToast } from '../../contexts/ToastContext';
 
 export function ChangeLanguageScreen({ navigation }: any) {
   const { user, updateUserProfile } = useAuth();
   const { colors } = useTheme();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const currentLang = user?.preferredLanguage || 'en';
 
   const selectLanguage = async (code: string) => {
     await updateUserProfile({ preferredLanguage: code });
+    showToast('Language updated', 'success');
     navigation.goBack();
   };
 
@@ -43,6 +47,8 @@ export function ChangeLanguageScreen({ navigation }: any) {
           </TouchableOpacity>
         ))}
       </View>
+      <AdBanner />
+      <View style={{ height: insets.bottom + 8 }} />
     </ScrollView>
   );
 }

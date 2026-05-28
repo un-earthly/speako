@@ -24,6 +24,7 @@ import {
   type PublicUserProfile,
 } from '../../services/firestore';
 import { Routes } from '../../constants/routes';
+import { AdBanner } from '../../components/common/AdBanner';
 
 type SearchMode = 'email' | 'phone';
 
