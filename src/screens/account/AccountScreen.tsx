@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Switch, Share, Clipboard, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
@@ -28,6 +28,9 @@ interface Section {
 export function AccountScreen({ navigation }: any) {
   const { user, logout, isPremium, updateUserProfile } = useAuth();
   const { theme, resolvedTheme, colors, isDark } = useTheme();
+  const referralCode = user?.referralCode || '';
+  const referralCount = user?.referralCount ?? 0;
+  const referralPoints = user?.referralPointsEarned ?? 0;
   const preferredLangName = getLanguageByCode(user?.preferredLanguage || '')?.name || user?.preferredLanguage || 'Not set';
   const insets = useSafeAreaInsets();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -170,6 +173,54 @@ export function AccountScreen({ navigation }: any) {
             </View>
           </View>
         ))}
+
+        {/* Refer & Earn */}
+        {referralCode ? (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+              REFER & EARN
+            </Text>
+            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={[styles.row, { justifyContent: 'space-between' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <Ionicons name="people-outline" size={20} color="#34C759" style={styles.rowIcon} />
+                  <View>
+                    <Text style={[styles.rowLabel, { color: colors.text }]}>
+                      Invite Friends
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                      {referralCount} invited · {referralPoints} pts earned
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              <View style={[styles.referralCodeRow, { borderTopColor: colors.border }]}>
+                <View style={[styles.referralCodeBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#F2F2F7' }]}>
+                  <Text style={[styles.referralCodeText, { color: colors.text }]}>{referralCode}</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.referralAction, { backgroundColor: '#007AFF' }]}
+                  onPress={() => {
+                    Clipboard.setString(referralCode);
+                    Alert.alert('Copied!', 'Referral code copied to clipboard.');
+                  }}
+                >
+                  <Ionicons name="copy-outline" size={16} color="#FFF" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.referralAction, { backgroundColor: '#34C759' }]}
+                  onPress={() => {
+                    Share.share({
+                      message: `Join me on Speako! Use my referral code ${referralCode} to get ${POINTS.REFERRAL_WELCOME} bonus points. Download the app here: https://speako.app`,
+                    });
+                  }}
+                >
+                  <Ionicons name="share-outline" size={16} color="#FFF" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        ) : null}
 
         {/* AI Conversation Mode */}
         <View style={styles.section}>
@@ -414,5 +465,32 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 12,
     fontWeight: '700',
+  },
+  referralCodeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  referralCodeBox: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  referralCodeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  referralAction: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

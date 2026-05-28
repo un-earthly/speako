@@ -12,6 +12,7 @@ import {
   Timestamp,
   getDocs,
   getDoc,
+  increment,
   type QuerySnapshot,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -25,6 +26,7 @@ export interface Conversation {
   status: 'waiting' | 'active';
   mode?: 'faceToFace';
   createdBy: string;
+  messageCount?: number;
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
   lastMessage?: {
@@ -241,6 +243,7 @@ export function subscribeToConversation(
         status: data.status,
         mode: data.mode,
         createdBy: data.createdBy,
+        messageCount: data.messageCount ?? 0,
         createdAt: data.createdAt,
         updatedAt: data.updatedAt,
         lastMessage: data.lastMessage,
@@ -275,6 +278,7 @@ export async function sendMessage(
   await updateDoc(doc(db, 'conversations', conversationId), {
     lastMessage: { text: originalText, senderId, timestamp: serverTimestamp() },
     updatedAt: serverTimestamp(),
+    messageCount: increment(1),
   });
 }
 

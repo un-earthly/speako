@@ -37,6 +37,7 @@ import { isSameDay, formatDateLabel } from '../../utils/date';
 import { useInterstitialAd } from '../../hooks/useInterstitialAd';
 import { useRewardedAd } from '../../hooks/useRewardedAd';
 import { POINTS, getUserPoints, deductPoints, rewardAdWatch } from '../../services/rewards';
+import { getMessageCost } from '../../utils/points';
 
 function WordHighlight({ text, baseStyle }: { text: string; baseStyle: any }) {
   const words = text.trim().split(/(\s+)/);
@@ -219,7 +220,10 @@ export function ConversationScreen({ route, navigation }: any) {
     const text = inputText.trim();
     if (!text || !user || !conversationId || conversation?.status !== 'active') return;
 
-    if (!isPremium && userPoints < POINTS.TRANSLATION_COST) {
+    const msgCount = conversation?.messageCount ?? 0;
+    const cost = isPremium ? 0 : getMessageCost(msgCount);
+
+    if (!isPremium && userPoints < cost) {
       setShowPointsBanner(true);
       return;
     }
@@ -235,8 +239,10 @@ export function ConversationScreen({ route, navigation }: any) {
       const translated = await translateText(text, myLanguage, otherLanguage, aiModeEnabled && useAITranslation);
 
       if (!isPremium) {
-        await deductPoints(user.uid, POINTS.TRANSLATION_COST);
-        setUserPoints((p) => Math.max(0, p - POINTS.TRANSLATION_COST));
+        const ok = await deductPoints(user.uid, cost, 'message', conversationId);
+        if (ok) {
+          setUserPoints((p) => Math.max(0, p - cost));
+        }
       }
 
       await sendMessage(conversationId, user.uid, text, translated, myLanguage, otherLanguage);
@@ -489,12 +495,21 @@ export function ConversationScreen({ route, navigation }: any) {
           </View>
         )}
 
+        {/* Message cost indicator */}
+        {!isPremium && conversation?.status === 'active' && (
+          <View style={[styles.costIndicator, { borderTopColor: colors.border }]}>
+            <Text style={[styles.costIndicatorText, { color: colors.textSecondary }]}>
+              {`This message costs ${getMessageCost(conversation?.messageCount ?? 0)} points`}
+            </Text>
+          </View>
+        )}
+
         {/* Insufficient points banner */}
         {showPointsBanner && (
           <View style={[styles.pointsBanner, { backgroundColor: isDark ? 'rgba(255,59,48,0.15)' : '#FFEBEE' }]}>
             <Ionicons name="flash" size={14} color="#FF3B30" />
             <Text style={[styles.pointsBannerText, { color: '#FF3B30' }]}>
-              Need {POINTS.TRANSLATION_COST} points to translate
+              Need {getMessageCost(conversation?.messageCount ?? 0)} points to translate
             </Text>
             <TouchableOpacity onPress={handleWatchAdForPoints} style={styles.pointsBannerBtn}>
               <Text style={styles.pointsBannerBtnText}>Watch Ad +{POINTS.WATCH_AD_BASE}</Text>
@@ -861,5 +876,15 @@ const styles = StyleSheet.create({
   suggestionNew: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  costIndicator: {
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+  },
+  costIndicatorText: {
+    fontSize: 11,
+    fontWeight: '500',
   },
 });

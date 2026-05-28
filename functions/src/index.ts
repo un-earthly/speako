@@ -57,7 +57,7 @@ export const createPaymentIntent = functions.https.onCall(async (data, context) 
 
 /**
  * Webhook handler for Stripe events.
- * Updates the user's subscription status in Firestore when payment succeeds.
+ * Handles Payment Links (checkout.session.completed) and PaymentIntents.
  */
 export const stripeWebhook = functions.https.onRequest(async (req, res) => {
   if (!stripe) {
@@ -82,22 +82,91 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
     return;
   }
 
-  if (event.type === 'payment_intent.succeeded') {
-    const paymentIntent = event.data.object as Stripe.PaymentIntent;
-    const uid = paymentIntent.metadata?.firebaseUserId;
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const uid = session.client_reference_id;
+      const plan = extractPlanFromSession(session);
 
-    if (uid) {
-      await admin.firestore().doc(`users/${uid}`).update({
-        subscriptionTier: 'premium',
-        subscriptionExpiry: admin.firestore.Timestamp.fromDate(
-          new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-        ),
-        lastPaymentIntentId: paymentIntent.id,
-        lastPaymentAmount: paymentIntent.amount,
-        lastPaymentCurrency: paymentIntent.currency,
-      });
+      if (uid) {
+        await activatePremium(uid, plan);
+        await recordPayment(uid, {
+          type: 'subscription',
+          plan: plan.plan,
+          currency: session.currency?.toUpperCase() || 'USD',
+          amount: session.amount_total ?? 0,
+          stripePaymentIntentId: session.payment_intent as string,
+        });
+        console.log('[Stripe] Premium activated via Payment Link for user:', uid);
+      }
     }
+
+    if (event.type === 'payment_intent.succeeded') {
+      const paymentIntent = event.data.object as Stripe.PaymentIntent;
+      const uid = paymentIntent.metadata?.firebaseUserId;
+
+      if (uid) {
+        await activatePremium(uid, { plan: 'monthly' });
+        await recordPayment(uid, {
+          type: 'subscription',
+          plan: 'monthly',
+          currency: paymentIntent.currency.toUpperCase(),
+          amount: paymentIntent.amount,
+          stripePaymentIntentId: paymentIntent.id,
+        });
+        console.log('[Stripe] Premium activated via PaymentIntent for user:', uid);
+      }
+    }
+
+    if (event.type === 'payment_intent.payment_failed') {
+      const paymentIntent = event.data.object as Stripe.PaymentIntent;
+      console.error('[Stripe] Payment failed:', paymentIntent.id, paymentIntent.last_payment_error?.message);
+    }
+  } catch (err: any) {
+    console.error('[Stripe] Webhook processing error:', err.message);
+    // Return 200 so Stripe doesn't retry indefinitely for non-recoverable errors
+    // But log it so we can investigate
   }
 
   res.json({ received: true });
 });
+
+interface PlanInfo {
+  plan: 'monthly' | 'yearly';
+}
+
+function extractPlanFromSession(session: Stripe.Checkout.Session): PlanInfo {
+  // Try to infer plan from line items or metadata
+  const metadata = session.metadata || {};
+  if (metadata.plan === 'yearly') return { plan: 'yearly' };
+  if (metadata.plan === 'monthly') return { plan: 'monthly' };
+  // Default to monthly if we can't tell
+  return { plan: 'monthly' };
+}
+
+async function activatePremium(uid: string, plan: PlanInfo) {
+  const days = plan.plan === 'yearly' ? 365 : 30;
+  const expiry = admin.firestore.Timestamp.fromDate(
+    new Date(Date.now() + days * 24 * 60 * 60 * 1000)
+  );
+
+  await admin.firestore().doc(`users/${uid}`).update({
+    subscriptionTier: 'premium',
+    subscriptionExpiry: expiry,
+  });
+}
+
+interface PaymentRecord {
+  type: 'subscription' | 'one_time';
+  plan: string;
+  currency: string;
+  amount: number;
+  stripePaymentIntentId: string;
+}
+
+async function recordPayment(uid: string, payment: PaymentRecord) {
+  await admin.firestore().collection(`users/${uid}/payments`).add({
+    ...payment,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}

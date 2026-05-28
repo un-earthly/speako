@@ -25,12 +25,16 @@ import { getLanguageByCode } from '../../constants/languages';
 import {
   sendMessage,
   subscribeToMessages,
+  subscribeToConversation,
   deleteMessage,
   deleteAllMessagesInConversation,
   type Message,
+  type Conversation,
 } from '../../services/firestore';
 import { translateText, translateAutoDetect } from '../../services/translation';
 import { isSameDay, formatDateLabel } from '../../utils/date';
+import { getMessageCost } from '../../utils/points';
+import { POINTS, deductPoints, getUserPoints, rewardAdWatch } from '../../services/rewards';
 import { Timestamp } from 'firebase/firestore';
 
 const ACTIVATION_THRESHOLD = 60;
@@ -58,7 +62,7 @@ function WordHighlight({ text, baseStyle }: { text: string; baseStyle: any }) {
 
 export function FaceToFaceScreen({ route, navigation }: any) {
   const { conversationId, langA, langB } = route.params;
-  const { user } = useAuth();
+  const { user, isPremium, points: authPoints } = useAuth();
   const { colors, isDark } = useTheme();
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -72,6 +76,9 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [activeSpeaker, setActiveSpeaker] = useState<'langA' | 'langB' | null>(null);
+  const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [userPoints, setUserPoints] = useState(authPoints);
+  const [showPointsBanner, setShowPointsBanner] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -99,13 +106,25 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     ExpoSpeechRecognitionModule.requestPermissionsAsync().catch(() => { });
   }, []);
 
-  // Subscribe to Firestore messages
+  // Subscribe to Firestore messages and conversation
   useEffect(() => {
-    return subscribeToMessages(conversationId, (msgs) => {
+    const unsubMsgs = subscribeToMessages(conversationId, (msgs) => {
       setMessages(msgs);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80);
     });
+    const unsubConvo = subscribeToConversation(conversationId, (convo) => {
+      setConversation(convo);
+    });
+    return () => {
+      unsubMsgs();
+      unsubConvo();
+    };
   }, [conversationId]);
+
+  // Sync points from auth
+  useEffect(() => {
+    setUserPoints(authPoints);
+  }, [authPoints]);
 
   // (Optimistic deduplication moved into allMessages useMemo to avoid render flicker)
 
@@ -178,6 +197,16 @@ export function FaceToFaceScreen({ route, navigation }: any) {
       return;
     }
 
+    const msgCount = conversation?.messageCount ?? messages.length;
+    const cost = isPremium ? 0 : getMessageCost(msgCount);
+
+    if (!isPremium && userPoints < cost) {
+      setShowPointsBanner(true);
+      setSending(false);
+      resetRecordingState();
+      return;
+    }
+
     setPhase('processing');
     setSending(true);
 
@@ -189,6 +218,11 @@ export function FaceToFaceScreen({ route, navigation }: any) {
       console.log('[Translate] sending to translateText:', JSON.stringify(text), sourceLang, targetLang);
       const translated = await translateText(text, sourceLang, targetLang);
       console.log('[Translate] result:', JSON.stringify(translated), 'source:', sourceLang, 'target:', targetLang);
+
+      if (!isPremium) {
+        const ok = await deductPoints(user!.uid, cost, 'message', conversationId);
+        if (ok) setUserPoints((p) => Math.max(0, p - cost));
+      }
 
       addOptimisticMessage(text, translated, sourceLang, targetLang, 'voice');
       sendMessage(conversationId, user!.uid, text, translated, sourceLang, targetLang, 'voice').catch(
@@ -390,6 +424,14 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     const text = inputText.trim();
     if (!text || !user || sending) return;
 
+    const msgCount = conversation?.messageCount ?? messages.length;
+    const cost = isPremium ? 0 : getMessageCost(msgCount);
+
+    if (!isPremium && userPoints < cost) {
+      setShowPointsBanner(true);
+      return;
+    }
+
     setInputText('');
     setTranslationPreview('');
     setIsPreviewLoading(false);
@@ -398,6 +440,12 @@ export function FaceToFaceScreen({ route, navigation }: any) {
 
     try {
       const { translated, sourceLang, targetLang } = await translateAutoDetect(text, langA, langB);
+
+      if (!isPremium) {
+        const ok = await deductPoints(user.uid, cost, 'message', conversationId);
+        if (ok) setUserPoints((p) => Math.max(0, p - cost));
+      }
+
       addOptimisticMessage(text, translated, sourceLang, targetLang, 'text');
       sendMessage(conversationId, user.uid, text, translated, sourceLang, targetLang, 'text').catch(
         (err) => console.error('FaceToFace send failed:', err),

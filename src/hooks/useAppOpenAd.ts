@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { AppOpenAd, AdEventType } from 'react-native-google-mobile-ads';
 import { AdUnitIds } from '../constants/ads';
+import { addPoints, POINTS } from '../services/rewards';
 
 let appOpenAd: AppOpenAd | null = null;
 
-export function useAppOpenAd() {
+export function useAppOpenAd(userId?: string) {
   const showedRef = useRef(false);
+  const rewardedRef = useRef(false);
 
   useEffect(() => {
     if (!appOpenAd) {
@@ -21,6 +23,11 @@ export function useAppOpenAd() {
       });
 
       appOpenAd.addAdEventListener(AdEventType.CLOSED, () => {
+        // Award points for watching the startup ad (once per session)
+        if (userId && !rewardedRef.current) {
+          rewardedRef.current = true;
+          addPoints(userId, POINTS.STARTUP_AD, 'startup_ad').catch(() => {});
+        }
         appOpenAd?.load();
       });
 
@@ -34,5 +41,5 @@ export function useAppOpenAd() {
     return () => {
       // AppOpenAd is a singleton, don't destroy it
     };
-  }, []);
+  }, [userId]);
 }

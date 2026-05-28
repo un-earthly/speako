@@ -15,6 +15,8 @@ import {
 import { doc, getDoc, setDoc, updateDoc, onSnapshot, Timestamp } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { getSubscriptionStatus, type SubscriptionStatus } from '../services/subscription';
+import { POINTS, addPoints, awardDailyLogin } from '../services/rewards';
+import { ensureReferralCode, registerReferralCode } from '../services/referral';
 
 export interface AppUser {
   uid: string;
@@ -30,6 +32,11 @@ export interface AppUser {
   points?: number;
   aiConversationEnabled?: boolean;
   aiConversationUnlocked?: boolean;
+  referralCode?: string;
+  referredBy?: string | null;
+  referralCount?: number;
+  referralPointsEarned?: number;
+  lastLoginDate?: string;
 }
 
 interface AuthContextValue {
@@ -89,6 +96,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setSubscription(getSubscriptionStatus(data.subscriptionTier, data.subscriptionExpiry));
             } else {
               // Create new user doc if missing
+              const referralCode = await ensureReferralCode(fbUser.uid);
+              await registerReferralCode(fbUser.uid, referralCode);
+
               const newUser: AppUser = {
                 uid: fbUser.uid,
                 email: fbUser.email,
@@ -100,11 +110,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 points: 0,
                 subscriptionTier: 'free',
                 subscriptionExpiry: null,
+                referralCode,
               };
               await setDoc(userRef, newUser);
+
+              // Award welcome bonus
+              await addPoints(fbUser.uid, POINTS.WELCOME_BONUS, 'welcome');
+              newUser.points = POINTS.WELCOME_BONUS;
+
               setUser(newUser);
               setSubscription(getSubscriptionStatus('free', null));
-              console.log('[Auth] Created new user doc in Firestore');
+              console.log('[Auth] Created new user doc in Firestore with welcome bonus');
             }
             setIsLoading(false);
           },
@@ -130,6 +146,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         );
         registerForPushNotifications(fbUser.uid).catch(() => {});
+
+    // Award daily login bonus if applicable
+    awardDailyLogin(fbUser.uid).catch(() => {});
       } else {
         setUser(null);
         setSubscription(getSubscriptionStatus('free', null));
@@ -155,6 +174,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (email: string, password: string, displayName: string) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(cred.user, { displayName });
+
+    const referralCode = await ensureReferralCode(cred.user.uid);
+    await registerReferralCode(cred.user.uid, referralCode);
+
     const newUser: AppUser = {
       uid: cred.user.uid,
       email: cred.user.email,
@@ -163,8 +186,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       preferredLanguage: 'en',
       phone: null,
       isDiscoverable: true,
+      referralCode,
     };
     await setDoc(doc(db, 'users', cred.user.uid), newUser);
+
+    // Award welcome bonus
+    await addPoints(cred.user.uid, POINTS.WELCOME_BONUS, 'welcome');
+    newUser.points = POINTS.WELCOME_BONUS;
+
     setUser(newUser);
     setSubscription(getSubscriptionStatus('free', null));
     return cred;

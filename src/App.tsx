@@ -8,6 +8,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { useAppOpenAd } from './hooks/useAppOpenAd';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { SplashScreen as CustomSplash } from './screens/auth/SplashScreen';
 import { AuthNavigator } from './navigation/AuthNavigator';
 import { AppNavigator } from './navigation/AppNavigator';
@@ -31,10 +32,10 @@ const linking = {
 };
 
 function RootNavigator() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const { resolvedTheme } = useTheme();
   const [showSplash, setShowSplash] = useState(true);
-  useAppOpenAd();
+  useAppOpenAd(user?.uid);
 
   const handleSplashReady = useCallback(() => {
     setShowSplash(false);
@@ -47,11 +48,24 @@ function RootNavigator() {
       if (url?.includes('payment/success')) {
         // User returned from successful Stripe payment
         // Premium activation happens via webhook or manual admin action
-        // For now, we can show a toast or alert when they land on Subscribe screen
+      }
+      // Process referral codes from deep links: speako://?ref=SPEAKO-XXXXXX
+      if (url) {
+        try {
+          const parsed = new URL(url);
+          const refCode = parsed.searchParams.get('ref');
+          if (refCode && user?.uid) {
+            import('./services/referral').then(({ processReferral }) => {
+              processReferral(user.uid, refCode).catch(() => {});
+            });
+          }
+        } catch {
+          // ignore invalid URLs
+        }
       }
     });
     return () => sub.remove();
-  }, []);
+  }, [user?.uid]);
 
   if (showSplash || isLoading) {
     return <CustomSplash onReady={handleSplashReady} />;
@@ -67,16 +81,18 @@ function RootNavigator() {
 
 export function App() {
   return (
-    <GestureHandlerRootView style={styles.gestureRoot}>
-      <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
-        <SafeAreaProvider>
-          <AuthProvider>
-            <ThemeProvider>
-              <RootNavigator />
-            </ThemeProvider>
-          </AuthProvider>
-        </SafeAreaProvider>
-      </StripeProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={styles.gestureRoot}>
+        <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
+          <SafeAreaProvider>
+            <AuthProvider>
+              <ThemeProvider>
+                <RootNavigator />
+              </ThemeProvider>
+            </AuthProvider>
+          </SafeAreaProvider>
+        </StripeProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }
