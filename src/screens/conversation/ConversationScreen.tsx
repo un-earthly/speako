@@ -263,8 +263,8 @@ export function ConversationScreen({ route, navigation }: any) {
     const prev = messages[index - 1];
     const showDate = index === 0 || !isSameDay(prev?.createdAt ?? null, item.createdAt);
     const isMe = item.senderId === user?.uid;
-    const primaryText = isMe ? item.originalText : item.translatedText;
-    const secondaryText = isMe ? item.translatedText : item.originalText;
+    const primaryText = item.translatedText;
+    const secondaryText = item.originalText;
     const speakText = isMe ? item.translatedText : item.originalText;
     const speakLang = isMe ? item.targetLanguage : item.sourceLanguage;
     const avatarCountryCode = isMe

@@ -470,7 +470,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
             ]}
           >
             <Text style={[styles.primaryText, { color: isPersonA ? '#FFF' : colors.text }]}>
-              {item.originalText}
+              {item.translatedText}
             </Text>
             {item.translatedText !== item.originalText && (
               <Text
@@ -479,7 +479,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
                   { color: isPersonA ? 'rgba(255,255,255,0.75)' : colors.textSecondary },
                 ]}
               >
-                {item.translatedText}
+                {item.originalText}
               </Text>
             )}
           </View>
