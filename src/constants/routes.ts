@@ -22,4 +22,6 @@ export const Routes = {
   ChangeLanguage: 'ChangeLanguage',
   ChangeTheme: 'ChangeTheme',
   FaceToFace: 'FaceToFace',
+  Subscribe: 'Subscribe',
+  SubscriptionManage: 'SubscriptionManage',
 } as const;

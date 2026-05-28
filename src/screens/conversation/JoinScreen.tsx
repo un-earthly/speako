@@ -19,6 +19,7 @@ import { LanguagePickerModal } from '../../components/common/LanguagePickerModal
 import { FlagEmoji } from '../../components/common/FlagEmoji';
 import { joinConversation } from '../../services/firestore';
 import { Routes } from '../../constants/routes';
+import { useInterstitialAd } from '../../hooks/useInterstitialAd';
 
 export function JoinScreen({ navigation }: any) {
   const { user, updateUserProfile } = useAuth();
@@ -28,6 +29,7 @@ export function JoinScreen({ navigation }: any) {
   const [joining, setJoining] = useState(false);
   const [myLanguage, setMyLanguage] = useState(user?.preferredLanguage || 'en');
   const [showLangPicker, setShowLangPicker] = useState(false);
+  const { showAd: showInterstitial } = useInterstitialAd();
 
   const myLang = getLanguageByCode(myLanguage);
 
@@ -41,6 +43,7 @@ export function JoinScreen({ navigation }: any) {
     setJoining(true);
     try {
       const conversationId = await joinConversation(code.trim(), user.uid, myLanguage);
+      await showInterstitial();
       navigation.replace(Routes.Conversation, { conversationId });
     } catch (err: any) {
       Alert.alert('Could not join', err.message || 'Something went wrong. Please try again.');

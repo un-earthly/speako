@@ -1,4 +1,5 @@
 import { getLanguageByCode } from '../constants/languages';
+import { translateWithAI } from './ai-translation';
 
 // Optional DeepL key — set to unlock 500K chars/month free tier
 const DEEPL_API_KEY = '';
@@ -187,10 +188,17 @@ export async function translateText(
   text: string,
   sourceLang: string,
   targetLang: string,
+  useAI: boolean = false,
 ): Promise<string> {
   const src = sourceLang.split('-')[0];
   const tgt = targetLang.split('-')[0];
   if (!text.trim() || src === tgt) return text;
+
+  // 0. AI Translation (premium)
+  if (useAI) {
+    const ai = await translateWithAI(text, src, tgt);
+    if (ai && ai !== text) return ai;
+  }
 
   const srcLocale = toLocale(src);
   const tgtLocale = toLocale(tgt);
@@ -210,7 +218,6 @@ export async function translateText(
   if (myMemory && myMemory !== text) return myMemory;
 
   // 4. LibreTranslate fallback, also chunked
-
   const libre = await translateChunked(text, (chunk) =>
     translateWithLibre(chunk, src, tgt)
   );

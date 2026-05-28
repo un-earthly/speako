@@ -21,6 +21,7 @@ import { FlagEmoji } from '../../components/common/FlagEmoji';
 import * as Speech from 'expo-speech';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { Routes } from '../../constants/routes';
 import { getLanguageByCode } from '../../constants/languages';
 import {
   sendMessage,
@@ -32,7 +33,9 @@ import {
 import { translateText } from '../../services/translation';
 import { checkSpelling, applyCorrection, type SpellMatch } from '../../services/spellcheck';
 import { sendPushNotification } from '../../services/notifications';
-import { Routes } from '../../constants/routes';
+import { useInterstitialAd } from '../../hooks/useInterstitialAd';
+import { useRewardedAd } from '../../hooks/useRewardedAd';
+import { POINTS, getUserPoints, deductPoints, rewardAdWatch } from '../../services/rewards';
 
 function WordHighlight({ text, baseStyle }: { text: string; baseStyle: any }) {
   const words = text.trim().split(/(\s+)/);
@@ -53,7 +56,8 @@ function WordHighlight({ text, baseStyle }: { text: string; baseStyle: any }) {
 
 export function ConversationScreen({ route, navigation }: any) {
   const { conversationId } = route.params || {};
-  const { user } = useAuth();
+  const { user, isPremium } = useAuth();
+  const aiModeEnabled = isPremium || (user?.aiConversationEnabled ?? false);
   const { colors, isDark } = useTheme();
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -65,6 +69,9 @@ export function ConversationScreen({ route, navigation }: any) {
   const [isRecording, setIsRecording] = useState(false);
   const [voicePartial, setVoicePartial] = useState('');
   const [langMismatch, setLangMismatch] = useState(false);
+  const [useAITranslation, setUseAITranslation] = useState(false);
+  const [userPoints, setUserPoints] = useState(0);
+  const [showPointsBanner, setShowPointsBanner] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const spellTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -72,6 +79,13 @@ export function ConversationScreen({ route, navigation }: any) {
   const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
   const myLanguageRef = useRef('en');
   const insets = useSafeAreaInsets();
+  const { showAd: showInterstitial } = useInterstitialAd();
+  const { showAd: showRewardedAd } = useRewardedAd();
+
+  useEffect(() => {
+    if (!user) return;
+    getUserPoints(user.uid).then(setUserPoints);
+  }, [user?.uid]);
 
   // Derive languages from conversation document
   const otherUid = conversation?.participants.find((p) => p !== user?.uid);
@@ -163,8 +177,11 @@ export function ConversationScreen({ route, navigation }: any) {
     try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
   };
 
+  const canTranslate = isPremium || userPoints >= POINTS.TRANSLATION_COST;
+
   const handleTextChange = (text: string) => {
     setInputText(text);
+    setShowPointsBanner(!isPremium && userPoints < POINTS.TRANSLATION_COST);
 
     clearTimeout(spellTimer.current);
     clearTimeout(previewTimer.current);
@@ -176,6 +193,8 @@ export function ConversationScreen({ route, navigation }: any) {
       return;
     }
 
+    if (!canTranslate) return;
+
     spellTimer.current = setTimeout(async () => {
       const matches = await checkSpelling(text, myLanguage);
       setSpellMatches(matches);
@@ -183,7 +202,7 @@ export function ConversationScreen({ route, navigation }: any) {
 
     setIsPreviewLoading(true);
     previewTimer.current = setTimeout(async () => {
-      const preview = await translateText(text, myLanguage, otherLanguage);
+      const preview = await translateText(text, myLanguage, otherLanguage, aiModeEnabled && useAITranslation);
       setTranslationPreview(preview !== text ? preview : '');
       setIsPreviewLoading(false);
     }, 900);
@@ -198,6 +217,12 @@ export function ConversationScreen({ route, navigation }: any) {
   const handleSend = async () => {
     const text = inputText.trim();
     if (!text || !user || !conversationId || conversation?.status !== 'active') return;
+
+    if (!isPremium && userPoints < POINTS.TRANSLATION_COST) {
+      setShowPointsBanner(true);
+      return;
+    }
+
     setInputText('');
     setSpellMatches([]);
     setTranslationPreview('');
@@ -206,7 +231,13 @@ export function ConversationScreen({ route, navigation }: any) {
     clearTimeout(previewTimer.current);
     setSending(true);
     try {
-      const translated = await translateText(text, myLanguage, otherLanguage);
+      const translated = await translateText(text, myLanguage, otherLanguage, aiModeEnabled && useAITranslation);
+
+      if (!isPremium) {
+        await deductPoints(user.uid, POINTS.TRANSLATION_COST);
+        setUserPoints((p) => Math.max(0, p - POINTS.TRANSLATION_COST));
+      }
+
       await sendMessage(conversationId, user.uid, text, translated, myLanguage, otherLanguage);
       if (otherUid) {
         sendPushNotification(otherUid, user.displayName || 'Someone', text, conversationId);
@@ -216,6 +247,15 @@ export function ConversationScreen({ route, navigation }: any) {
     } finally {
       setSending(false);
     }
+  };
+
+  const handleWatchAdForPoints = async () => {
+    if (!user) return;
+    showRewardedAd(async () => {
+      const result = await rewardAdWatch(user.uid);
+      setUserPoints(result.newTotal);
+      setShowPointsBanner(false);
+    });
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
@@ -317,7 +357,7 @@ export function ConversationScreen({ route, navigation }: any) {
   if (conversation.status === 'waiting') {
     return (
       <View style={[styles.centerState, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-        <TouchableOpacity style={styles.backBtnAbs} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.backBtnAbs} onPress={async () => { await showInterstitial(); navigation.goBack(); }}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Ionicons name="time-outline" size={48} color={colors.textSecondary} />
@@ -346,7 +386,7 @@ export function ConversationScreen({ route, navigation }: any) {
             { paddingTop: insets.top + 8, borderBottomColor: colors.border },
           ]}
         >
-          <TouchableOpacity onPress={() => navigation.goBack()}>
+          <TouchableOpacity onPress={async () => { await showInterstitial(); navigation.goBack(); }}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <View style={styles.langIndicators}>
@@ -433,6 +473,43 @@ export function ConversationScreen({ route, navigation }: any) {
             <Ionicons name="warning-outline" size={14} color="#FFF" />
             <Text style={styles.mismatchText}>Detected different language — check your selection</Text>
           </View>
+        )}
+
+        {/* Insufficient points banner */}
+        {showPointsBanner && (
+          <View style={[styles.pointsBanner, { backgroundColor: isDark ? 'rgba(255,59,48,0.15)' : '#FFEBEE' }]}>
+            <Ionicons name="flash" size={14} color="#FF3B30" />
+            <Text style={[styles.pointsBannerText, { color: '#FF3B30' }]}>
+              Need {POINTS.TRANSLATION_COST} points to translate
+            </Text>
+            <TouchableOpacity onPress={handleWatchAdForPoints} style={styles.pointsBannerBtn}>
+              <Text style={styles.pointsBannerBtnText}>Watch Ad +{POINTS.WATCH_AD_BASE}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* AI toggle / Premium upsell */}
+        {aiModeEnabled ? (
+          <TouchableOpacity
+            onPress={() => setUseAITranslation((v) => !v)}
+            style={[styles.aiToggle, { backgroundColor: isDark ? 'rgba(0,122,255,0.15)' : '#E8F2FF', borderTopColor: colors.border }]}
+          >
+            <Ionicons name="sparkles" size={14} color="#007AFF" />
+            <Text style={[styles.aiToggleText, { color: '#007AFF' }]}>
+              {useAITranslation ? 'AI Translation ON' : 'AI Translation OFF'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={() => navigation.navigate(Routes.Subscribe)}
+            style={[styles.premiumBanner, { backgroundColor: isDark ? 'rgba(255,165,0,0.15)' : '#FFF8E1', borderTopColor: colors.border }]}
+          >
+            <Ionicons name="sparkles" size={14} color="#FF9500" />
+            <Text style={[styles.premiumBannerText, { color: '#FF9500' }]}>
+              Upgrade to Premium for AI translations
+            </Text>
+            <Ionicons name="chevron-forward" size={14} color="#FF9500" />
+          </TouchableOpacity>
         )}
 
         {/* Input bar */}
@@ -636,6 +713,56 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     flex: 1,
+  },
+  aiToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  aiToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  premiumBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  premiumBannerText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  pointsBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  pointsBannerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+    marginLeft: 6,
+  },
+  pointsBannerBtn: {
+    backgroundColor: '#FF3B30',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  pointsBannerBtnText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
   inputBar: {
     flexDirection: 'row',

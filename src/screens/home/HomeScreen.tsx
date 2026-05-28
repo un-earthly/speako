@@ -18,6 +18,7 @@ import { LanguagePickerModal } from '../../components/common/LanguagePickerModal
 import { getLanguageByCode, type Language } from '../../constants/languages';
 import { Routes } from '../../constants/routes';
 import { createConversation, createFaceToFaceConversation, subscribeToConversations, type Conversation } from '../../services/firestore';
+import { useInterstitialAd } from '../../hooks/useInterstitialAd';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -35,6 +36,7 @@ export function HomeScreen({ navigation }: any) {
   const [starting, setStarting] = useState(false);
   const [recentConvos, setRecentConvos] = useState<Conversation[]>([]);
   const insets = useSafeAreaInsets();
+  const { showAd: showInterstitial } = useInterstitialAd();
 
   useEffect(() => {
     if (!user) return;
@@ -74,6 +76,7 @@ export function HomeScreen({ navigation }: any) {
     setStarting(true);
     try {
       const conversationId = await createFaceToFaceConversation(user.uid, myLanguage, theirLanguage);
+      await showInterstitial();
       navigation.navigate(Routes.FaceToFace, { conversationId, langA: myLanguage, langB: theirLanguage });
     } catch (err) {
       console.error('Failed to create face-to-face conversation:', err);
@@ -88,6 +91,7 @@ export function HomeScreen({ navigation }: any) {
     try {
       const lang = myLanguage || 'en';
       const { conversationId, inviteCode } = await createConversation(user.uid, lang, theirLanguage || undefined);
+      await showInterstitial();
       navigation.navigate(Routes.Waiting, { conversationId, inviteCode, myLanguage: lang });
     } catch (err) {
       console.error('Failed to create conversation:', err);

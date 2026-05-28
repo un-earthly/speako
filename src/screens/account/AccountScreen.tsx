@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Switch } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getLanguageByCode } from '../../constants/languages';
 import { Routes } from '../../constants/routes';
+import { useRewardedAd } from '../../hooks/useRewardedAd';
+import { RewardModal } from '../../components/common/RewardModal';
+import { rewardAdWatch, POINTS, unlockAIConversation } from '../../services/rewards';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -23,11 +26,16 @@ interface Section {
 }
 
 export function AccountScreen({ navigation }: any) {
-  const { user, logout } = useAuth();
+  const { user, logout, isPremium, updateUserProfile } = useAuth();
   const { theme, resolvedTheme, colors, isDark } = useTheme();
   const preferredLangName = getLanguageByCode(user?.preferredLanguage || '')?.name || user?.preferredLanguage || 'Not set';
   const insets = useSafeAreaInsets();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showRewardModal, setShowRewardModal] = useState(false);
+  const [rewardInfo, setRewardInfo] = useState({ points: POINTS.WATCH_AD_BASE, streak: 1 });
+  const { showAd: showRewardedAd } = useRewardedAd();
+  const aiUnlocked = isPremium || (user?.aiConversationUnlocked ?? false);
+  const aiEnabled = user?.aiConversationEnabled ?? false;
 
   const sections: Section[] = [
     {
@@ -52,15 +60,29 @@ export function AccountScreen({ navigation }: any) {
     {
       title: 'OTHER',
       items: [
+        isPremium
+          ? { label: 'Premium Active', iconName: 'diamond', screen: Routes.SubscriptionManage, danger: false }
+          : { label: 'Upgrade to Premium', iconName: 'diamond', screen: Routes.Subscribe, danger: false },
+        { label: 'Watch Ad for Points', iconName: 'videocam-outline', screen: '', danger: false },
         { label: 'Logout', iconName: 'exit-outline', screen: '', danger: true },
       ],
     },
   ];
 
   const handleItemPress = (item: MenuItem) => {
+    if (item.label === 'Watch Ad for Points') {
+      showRewardedAd(async () => {
+        if (user) {
+          const result = await rewardAdWatch(user.uid);
+          setRewardInfo({ points: result.pointsEarned, streak: result.streak });
+          setShowRewardModal(true);
+        }
+      });
+      return;
+    }
     if (item.danger) {
       setShowLogoutModal(true);
-    } else {
+    } else if (item.screen) {
       navigation.navigate(item.screen);
     }
   };
@@ -95,6 +117,10 @@ export function AccountScreen({ navigation }: any) {
             <Text style={[styles.profileEmail, { color: colors.textSecondary }]} numberOfLines={1}>
               {user?.email || ''}
             </Text>
+          </View>
+          <View style={[styles.pointsBadge, { backgroundColor: isDark ? 'rgba(255,149,0,0.20)' : '#FFF8E1' }]}>
+            <Ionicons name="flash" size={14} color="#FF9500" />
+            <Text style={styles.pointsBadgeText}>{user?.points ?? 0}</Text>
           </View>
         </View>
 
@@ -145,7 +171,68 @@ export function AccountScreen({ navigation }: any) {
           </View>
         ))}
 
+        {/* AI Conversation Mode */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            AI FEATURES
+          </Text>
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.row, { justifyContent: 'space-between' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <Ionicons
+                  name="sparkles"
+                  size={20}
+                  color={aiUnlocked ? '#007AFF' : colors.textSecondary}
+                  style={styles.rowIcon}
+                />
+                <View>
+                  <Text style={[styles.rowLabel, { color: aiUnlocked ? colors.text : colors.textSecondary }]}>
+                    AI Conversation Mode
+                  </Text>
+                  <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                    {aiUnlocked
+                      ? (aiEnabled ? 'AI-enhanced replies active' : 'Tap to enable AI suggestions')
+                      : 'Watch an ad to unlock'}
+                  </Text>
+                </View>
+              </View>
+              {aiUnlocked ? (
+                <Switch
+                  value={aiEnabled}
+                  onValueChange={(v) => updateUserProfile({ aiConversationEnabled: v })}
+                  trackColor={{ false: '#C7C7CC', true: '#007AFF' }}
+                  thumbColor="#FFF"
+                  ios_backgroundColor="#C7C7CC"
+                />
+              ) : (
+                <TouchableOpacity
+                  style={styles.unlockBtn}
+                  onPress={() => {
+                    showRewardedAd(async () => {
+                      if (user) {
+                        await unlockAIConversation(user.uid);
+                        await updateUserProfile({ aiConversationEnabled: true });
+                      }
+                    });
+                  }}
+                >
+                  <Ionicons name="videocam-outline" size={14} color="#FFF" />
+                  <Text style={styles.unlockBtnText}>Watch Ad</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+
       </ScrollView>
+
+      <RewardModal
+        visible={showRewardModal}
+        points={rewardInfo.points}
+        streak={rewardInfo.streak}
+        message="Thanks for supporting Speako!"
+        onClose={() => setShowRewardModal(false)}
+      />
 
       {/* Logout confirm modal */}
       <Modal visible={showLogoutModal} transparent animationType="fade">
@@ -200,6 +287,19 @@ const styles = StyleSheet.create({
   },
   profileInfo: {
     flex: 1,
+  },
+  pointsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  pointsBadgeText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FF9500',
   },
   profileName: {
     fontSize: 17,
@@ -300,5 +400,19 @@ const styles = StyleSheet.create({
   cancelBtnText: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  unlockBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  unlockBtnText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

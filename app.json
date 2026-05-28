@@ -1,10 +1,14 @@
 {
+  "react-native-google-mobile-ads": {
+    "android_app_id": "ca-app-pub-6826771706478909~1596967945",
+    "ios_app_id": "ca-app-pub-6826771706478909~1596967945"
+  },
   "expo": {
     "name": "Speako",
     "slug": "speako",
     "version": "1.0.0",
     "orientation": "default",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/appstore.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "scheme": "speako",
@@ -50,6 +54,13 @@
         {
           "androidAppId": "ca-app-pub-6826771706478909~1596967945",
           "iosAppId": "ca-app-pub-6826771706478909~1596967945"
+        }
+      ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.champaius.speako",
+          "enableGooglePay": true
         }
       ]
     ]

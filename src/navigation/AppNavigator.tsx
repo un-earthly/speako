@@ -12,6 +12,8 @@ import { PersonalInfoScreen } from '../screens/account/PersonalInfoScreen';
 import { ChangePasswordScreen } from '../screens/account/ChangePasswordScreen';
 import { ChangeLanguageScreen } from '../screens/account/ChangeLanguageScreen';
 import { ChangeThemeScreen } from '../screens/account/ChangeThemeScreen';
+import { SubscribeScreen } from '../screens/account/SubscribeScreen';
+import { SubscriptionManageScreen } from '../screens/account/SubscriptionManageScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -36,6 +38,8 @@ export function AppNavigator() {
       <Stack.Screen name={Routes.ChangePassword} component={ChangePasswordScreen} />
       <Stack.Screen name={Routes.ChangeLanguage} component={ChangeLanguageScreen} />
       <Stack.Screen name={Routes.ChangeTheme} component={ChangeThemeScreen} />
+      <Stack.Screen name={Routes.Subscribe} component={SubscribeScreen} />
+      <Stack.Screen name={Routes.SubscriptionManage} component={SubscriptionManageScreen} />
     </Stack.Navigator>
   );
 }
