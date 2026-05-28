@@ -28,7 +28,7 @@ interface Section {
 }
 
 export function AccountScreen({ navigation }: any) {
-  const { user, firebaseUser, logout, isPremium, updateUserProfile } = useAuth();
+  const { user, firebaseUser, logout, updateUserProfile } = useAuth();
   const { theme, resolvedTheme, colors, isDark } = useTheme();
   const { showToast } = useToast();
   const hasPasswordProvider = firebaseUser?.providerData?.some((p) => p.providerId === 'password') ?? false;
@@ -41,7 +41,7 @@ export function AccountScreen({ navigation }: any) {
   const [showRewardModal, setShowRewardModal] = useState(false);
   const [rewardInfo, setRewardInfo] = useState({ points: POINTS.WATCH_AD_BASE, streak: 1 });
   const { showAd: showRewardedAd } = useRewardedAd();
-  const aiUnlocked = isPremium || (user?.aiConversationUnlocked ?? false);
+  const aiUnlocked = user?.aiConversationUnlocked ?? false;
   const aiEnabled = user?.aiConversationEnabled ?? false;
 
   const sections: Section[] = [
@@ -67,9 +67,6 @@ export function AccountScreen({ navigation }: any) {
     {
       title: 'OTHER',
       items: [
-        isPremium
-          ? { label: 'Premium Active', iconName: 'diamond', screen: Routes.SubscriptionManage, danger: false }
-          : { label: 'Upgrade to Premium', iconName: 'diamond', screen: Routes.Subscribe, danger: false },
         { label: 'Watch Ad for Points', iconName: 'videocam-outline', screen: '', danger: false },
         { label: 'Logout', iconName: 'exit-outline', screen: '', danger: true },
       ],

@@ -59,8 +59,8 @@ function WordHighlight({ text, baseStyle }: { text: string; baseStyle: any }) {
 
 export function ConversationScreen({ route, navigation }: any) {
   const { conversationId } = route.params || {};
-  const { user, isPremium } = useAuth();
-  const aiModeEnabled = isPremium || (user?.aiConversationEnabled ?? false);
+  const { user } = useAuth();
+  const aiModeEnabled = user?.aiConversationEnabled ?? false;
   const { colors, isDark } = useTheme();
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -180,11 +180,11 @@ export function ConversationScreen({ route, navigation }: any) {
     try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
   };
 
-  const canTranslate = isPremium || userPoints >= POINTS.TRANSLATION_COST;
+  const canTranslate = userPoints >= getMessageCost(conversation?.messageCount ?? 0);
 
   const handleTextChange = (text: string) => {
     setInputText(text);
-    setShowPointsBanner(!isPremium && userPoints < POINTS.TRANSLATION_COST);
+    setShowPointsBanner(userPoints < getMessageCost(conversation?.messageCount ?? 0));
 
     clearTimeout(spellTimer.current);
     clearTimeout(previewTimer.current);
@@ -222,9 +222,9 @@ export function ConversationScreen({ route, navigation }: any) {
     if (!text || !user || !conversationId || conversation?.status !== 'active') return;
 
     const msgCount = conversation?.messageCount ?? 0;
-    const cost = isPremium ? 0 : getMessageCost(msgCount);
+    const cost = getMessageCost(msgCount);
 
-    if (!isPremium && userPoints < cost) {
+    if (userPoints < cost) {
       setShowPointsBanner(true);
       return;
     }
@@ -239,11 +239,9 @@ export function ConversationScreen({ route, navigation }: any) {
     try {
       const translated = await translateText(text, myLanguage, otherLanguage, aiModeEnabled && useAITranslation);
 
-      if (!isPremium) {
-        const ok = await deductPoints(user.uid, cost, 'message', conversationId);
-        if (ok) {
-          setUserPoints((p) => Math.max(0, p - cost));
-        }
+      const ok = await deductPoints(user.uid, cost, 'message', conversationId);
+      if (ok) {
+        setUserPoints((p) => Math.max(0, p - cost));
       }
 
       await sendMessage(conversationId, user.uid, text, translated, myLanguage, otherLanguage);
@@ -497,7 +495,7 @@ export function ConversationScreen({ route, navigation }: any) {
         )}
 
         {/* Message cost indicator */}
-        {!isPremium && conversation?.status === 'active' && (
+        {conversation?.status === 'active' && (
           <View style={[styles.costIndicator, { borderTopColor: colors.border }]}>
             <Text style={[styles.costIndicatorText, { color: colors.textSecondary }]}>
               {`This message costs ${getMessageCost(conversation?.messageCount ?? 0)} points`}
@@ -510,7 +508,7 @@ export function ConversationScreen({ route, navigation }: any) {
           <View style={[styles.pointsBanner, { backgroundColor: isDark ? 'rgba(255,59,48,0.15)' : '#FFEBEE' }]}>
             <Ionicons name="flash" size={14} color="#FF3B30" />
             <Text style={[styles.pointsBannerText, { color: '#FF3B30' }]}>
-              Need {getMessageCost(conversation?.messageCount ?? 0)} points to translate
+              Need {getMessageCost(conversation?.messageCount ?? 0)} points
             </Text>
             <TouchableOpacity onPress={handleWatchAdForPoints} style={styles.pointsBannerBtn}>
               <Text style={styles.pointsBannerBtnText}>Watch Ad +{POINTS.WATCH_AD_BASE}</Text>
@@ -520,7 +518,7 @@ export function ConversationScreen({ route, navigation }: any) {
 
         <AdBanner />
 
-        {/* AI toggle / Premium upsell */}
+        {/* AI toggle */}
         {aiModeEnabled ? (
           <TouchableOpacity
             onPress={() => setUseAITranslation((v) => !v)}

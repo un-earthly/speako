@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { StatusBar, StyleSheet, Linking } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StripeProvider } from '@stripe/stripe-react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -17,7 +16,7 @@ import { Routes } from './constants/routes';
 
 SplashScreen.preventAutoHideAsync();
 
-const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
+
 
 const styles = StyleSheet.create({
   gestureRoot: { flex: 1 },
@@ -84,17 +83,15 @@ export function App() {
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={styles.gestureRoot}>
-        <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
-          <SafeAreaProvider>
-            <AuthProvider>
-              <ThemeProvider>
-                <ToastProvider>
-                  <RootNavigator />
-                </ToastProvider>
-              </ThemeProvider>
-            </AuthProvider>
-          </SafeAreaProvider>
-        </StripeProvider>
+        <SafeAreaProvider>
+          <AuthProvider>
+            <ThemeProvider>
+              <ToastProvider>
+                <RootNavigator />
+              </ToastProvider>
+            </ThemeProvider>
+          </AuthProvider>
+        </SafeAreaProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
   );

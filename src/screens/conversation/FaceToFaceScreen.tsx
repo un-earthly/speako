@@ -64,7 +64,7 @@ function WordHighlight({ text, baseStyle }: { text: string; baseStyle: any }) {
 
 export function FaceToFaceScreen({ route, navigation }: any) {
   const { conversationId, langA, langB } = route.params;
-  const { user, isPremium, points: authPoints } = useAuth();
+  const { user, points: authPoints } = useAuth();
   const { colors, isDark } = useTheme();
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -200,9 +200,9 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     }
 
     const msgCount = conversation?.messageCount ?? messages.length;
-    const cost = isPremium ? 0 : getMessageCost(msgCount);
+    const cost = getMessageCost(msgCount);
 
-    if (!isPremium && userPoints < cost) {
+    if (userPoints < cost) {
       setShowPointsBanner(true);
       setSending(false);
       resetRecordingState();
@@ -221,10 +221,8 @@ export function FaceToFaceScreen({ route, navigation }: any) {
       const translated = await translateText(text, sourceLang, targetLang);
       console.log('[Translate] result:', JSON.stringify(translated), 'source:', sourceLang, 'target:', targetLang);
 
-      if (!isPremium) {
-        const ok = await deductPoints(user!.uid, cost, 'message', conversationId);
-        if (ok) setUserPoints((p) => Math.max(0, p - cost));
-      }
+      const ok = await deductPoints(user!.uid, cost, 'message', conversationId);
+      if (ok) setUserPoints((p) => Math.max(0, p - cost));
 
       addOptimisticMessage(text, translated, sourceLang, targetLang, 'voice');
       sendMessage(conversationId, user!.uid, text, translated, sourceLang, targetLang, 'voice').catch(
@@ -438,9 +436,9 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     if (!text || !user || sending) return;
 
     const msgCount = conversation?.messageCount ?? messages.length;
-    const cost = isPremium ? 0 : getMessageCost(msgCount);
+    const cost = getMessageCost(msgCount);
 
-    if (!isPremium && userPoints < cost) {
+    if (userPoints < cost) {
       setShowPointsBanner(true);
       return;
     }
@@ -454,10 +452,8 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     try {
       const { translated, sourceLang, targetLang } = await translateAutoDetect(text, langA, langB);
 
-      if (!isPremium) {
-        const ok = await deductPoints(user.uid, cost, 'message', conversationId);
-        if (ok) setUserPoints((p) => Math.max(0, p - cost));
-      }
+      const ok = await deductPoints(user.uid, cost, 'message', conversationId);
+      if (ok) setUserPoints((p) => Math.max(0, p - cost));
 
       addOptimisticMessage(text, translated, sourceLang, targetLang, 'text');
       sendMessage(conversationId, user.uid, text, translated, sourceLang, targetLang, 'text').catch(
@@ -703,13 +699,11 @@ export function FaceToFaceScreen({ route, navigation }: any) {
         <AdBanner />
 
         {/* Cost indicator */}
-        {!isPremium && (
-          <View style={[styles.costIndicator, { borderTopColor: colors.border }]}>
-            <Text style={[styles.costIndicatorText, { color: colors.textSecondary }]}>
-              {`Next message costs ${getMessageCost(conversation?.messageCount ?? messages.length)} points`}
-            </Text>
-          </View>
-        )}
+        <View style={[styles.costIndicator, { borderTopColor: colors.border }]}>
+          <Text style={[styles.costIndicatorText, { color: colors.textSecondary }]}>
+            {`Next message costs ${getMessageCost(conversation?.messageCount ?? messages.length)} points`}
+          </Text>
+        </View>
 
         {/* Insufficient points banner */}
         {showPointsBanner && (

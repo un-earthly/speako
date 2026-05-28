@@ -14,7 +14,6 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, onSnapshot, Timestamp } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
-import { getSubscriptionStatus, type SubscriptionStatus } from '../services/subscription';
 import { POINTS, addPoints, awardDailyLogin } from '../services/rewards';
 import { ensureReferralCode, registerReferralCode } from '../services/referral';
 
@@ -27,8 +26,6 @@ export interface AppUser {
   lastTheirLanguage?: string;
   phone?: string | null;
   isDiscoverable?: boolean;
-  subscriptionTier?: string;
-  subscriptionExpiry?: Timestamp | null;
   points?: number;
   aiConversationEnabled?: boolean;
   aiConversationUnlocked?: boolean;
@@ -44,8 +41,6 @@ interface AuthContextValue {
   firebaseUser: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  isPremium: boolean;
-  subscription: SubscriptionStatus;
   points: number;
   login: (email: string, password: string) => Promise<UserCredential>;
   loginWithGoogle: (credential: OAuthCredential) => Promise<UserCredential>;
@@ -61,11 +56,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [user, setUser] = useState<AppUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [subscription, setSubscription] = useState<SubscriptionStatus>({
-    tier: 'free',
-    expiry: null,
-    isActive: false,
-  });
 
   useEffect(() => {
     let userDocUnsub: (() => void) | null = null;
@@ -74,14 +64,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('[Auth] onAuthStateChanged fired. User:', fbUser?.uid ?? 'null');
       setFirebaseUser(fbUser);
 
-      // Clean up previous user doc listener
       if (userDocUnsub) {
         userDocUnsub();
         userDocUnsub = null;
       }
 
       if (fbUser) {
-        // Set up real-time listener for user document
         const userRef = doc(db, 'users', fbUser.uid);
         userDocUnsub = onSnapshot(
           userRef,
@@ -93,9 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 data.isDiscoverable = true;
               }
               setUser(data);
-              setSubscription(getSubscriptionStatus(data.subscriptionTier, data.subscriptionExpiry));
             } else {
-              // Create new user doc if missing
               const referralCode = await ensureReferralCode(fbUser.uid);
               await registerReferralCode(fbUser.uid, referralCode);
 
@@ -108,26 +94,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 phone: null,
                 isDiscoverable: true,
                 points: 0,
-                subscriptionTier: 'free',
-                subscriptionExpiry: null,
                 referralCode,
               };
               await setDoc(userRef, newUser);
 
-              // Award welcome bonus
               await addPoints(fbUser.uid, POINTS.WELCOME_BONUS, 'welcome');
               newUser.points = POINTS.WELCOME_BONUS;
 
               setUser(newUser);
-              setSubscription(getSubscriptionStatus('free', null));
-              console.log('[Auth] Created new user doc in Firestore with welcome bonus');
+              console.log('[Auth] Created new user doc with welcome bonus');
             }
             setIsLoading(false);
           },
           (err) => {
             console.error('[Auth] Firestore onSnapshot failed:', err.message);
-            // Fallback: create a minimal user object from Firebase auth so the app
-            // doesn't hang even if Firestore is unreachable
             const fallbackUser: AppUser = {
               uid: fbUser.uid,
               email: fbUser.email,
@@ -136,22 +116,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               preferredLanguage: 'en',
               phone: null,
               isDiscoverable: true,
-              subscriptionTier: 'free',
-              subscriptionExpiry: null,
               points: 0,
             };
             setUser(fallbackUser);
-            setSubscription(getSubscriptionStatus('free', null));
             setIsLoading(false);
           }
         );
         registerForPushNotifications(fbUser.uid).catch(() => {});
-
-    // Award daily login bonus if applicable
-    awardDailyLogin(fbUser.uid).catch(() => {});
+        awardDailyLogin(fbUser.uid).catch(() => {});
       } else {
         setUser(null);
-        setSubscription(getSubscriptionStatus('free', null));
         setIsLoading(false);
         console.log('[Auth] isLoading set to false. user: null');
       }
@@ -190,12 +164,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     await setDoc(doc(db, 'users', cred.user.uid), newUser);
 
-    // Award welcome bonus
     await addPoints(cred.user.uid, POINTS.WELCOME_BONUS, 'welcome');
     newUser.points = POINTS.WELCOME_BONUS;
 
     setUser(newUser);
-    setSubscription(getSubscriptionStatus('free', null));
     return cred;
   };
 
@@ -214,9 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await updateDoc(ref, data);
     setUser((prev) => {
       if (!prev) return null;
-      const next = { ...prev, ...data };
-      setSubscription(getSubscriptionStatus(next.subscriptionTier, next.subscriptionExpiry));
-      return next;
+      return { ...prev, ...data };
     });
   };
 
@@ -227,8 +197,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         firebaseUser,
         isLoading,
         isAuthenticated: !!user,
-        isPremium: subscription.isActive,
-        subscription,
         points: user?.points ?? 0,
         login,
         loginWithGoogle,
