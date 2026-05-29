@@ -19,8 +19,7 @@ async function translateWithGoogle(text: string, src: string, tgt: string): Prom
     const res = await fetch(url);
     const json = await res.json();
     const translated = (json[0] as any[][])
-      ?.map((chunk) => chunk[0])
-      .filter(Boolean)
+      ?.map((chunk) => chunk[0] || '')
       .join('');
     if (!translated || translated === text) return null;
     return translated;
@@ -154,7 +153,7 @@ export async function translateAutoDetect(
     const resA = await fetch(urlA);
     const jsonA = await resA.json();
     const detectedSource: string = (jsonA[2] ?? '').split('-')[0];
-    const translatedToA = (jsonA[0] as any[][])?.map((c) => c[0]).filter(Boolean).join('') ?? '';
+    const translatedToA = (jsonA[0] as any[][])?.map((c) => c[0] || '').join('') ?? '';
 
     if (detectedSource !== langABase) {
       // Google detected something other than langA → Person B is speaking
@@ -170,7 +169,7 @@ export async function translateAutoDetect(
     const urlB = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${langABase}&tl=${langBBase}&dt=t&q=${encodeURIComponent(text)}`;
     const resB = await fetch(urlB);
     const jsonB = await resB.json();
-    const translatedToB = (jsonB[0] as any[][])?.map((c) => c[0]).filter(Boolean).join('') ?? '';
+    const translatedToB = (jsonB[0] as any[][])?.map((c) => c[0] || '').join('') ?? '';
     return {
       translated: translatedToB && translatedToB !== text ? translatedToB : text,
       sourceLang: langA,

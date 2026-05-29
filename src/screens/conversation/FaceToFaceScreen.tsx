@@ -36,6 +36,7 @@ import { translateText, translateAutoDetect } from '../../services/translation';
 import { isSameDay, formatDateLabel } from '../../utils/date';
 import { getMessageCost } from '../../utils/points';
 import { POINTS, deductPoints, getUserPoints, rewardAdWatch } from '../../services/rewards';
+import { useInterstitialAd } from '../../hooks/useInterstitialAd';
 import { useRewardedAd } from '../../hooks/useRewardedAd';
 import { AdBanner } from '../../components/common/AdBanner';
 import { Timestamp } from 'firebase/firestore';
@@ -87,6 +88,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const sessionMsgCountRef = useRef(0);
   const insets = useSafeAreaInsets();
 
   const panX = useRef(new Animated.Value(0)).current;
@@ -229,6 +231,10 @@ export function FaceToFaceScreen({ route, navigation }: any) {
       sendMessage(conversationId, user!.uid, text, translated, sourceLang, targetLang, 'voice').catch(
         (err) => console.error('Firestore send failed:', err),
       );
+      sessionMsgCountRef.current += 1;
+      if (sessionMsgCountRef.current % 10 === 0) {
+        showInterstitial();
+      }
     } catch (err) {
       console.error('Finalize failed:', err);
     } finally {
@@ -422,6 +428,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   };
 
   const { showAd: showRewardedAd } = useRewardedAd();
+  const { showAd: showInterstitial } = useInterstitialAd();
   const { showToast } = useToast();
 
   const handleWatchAdForPoints = async () => {
@@ -461,6 +468,10 @@ export function FaceToFaceScreen({ route, navigation }: any) {
       sendMessage(conversationId, user.uid, text, translated, sourceLang, targetLang, 'text').catch(
         (err) => console.error('FaceToFace send failed:', err),
       );
+      sessionMsgCountRef.current += 1;
+      if (sessionMsgCountRef.current % 10 === 0) {
+        showInterstitial();
+      }
     } catch (err) {
       console.error('FaceToFace send failed:', err);
     } finally {

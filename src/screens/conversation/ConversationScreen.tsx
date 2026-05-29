@@ -82,6 +82,7 @@ export function ConversationScreen({ route, navigation }: any) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
   const myLanguageRef = useRef('en');
+  const sessionMsgCountRef = useRef(0);
   const insets = useSafeAreaInsets();
   const { showAd: showInterstitial } = useInterstitialAd();
   const { showAd: showRewardedAd } = useRewardedAd();
@@ -248,6 +249,10 @@ export function ConversationScreen({ route, navigation }: any) {
       }
 
       await sendMessage(conversationId, user.uid, text, translated, myLanguage, otherLanguage);
+      sessionMsgCountRef.current += 1;
+      if (sessionMsgCountRef.current % 10 === 0) {
+        showInterstitial();
+      }
       if (otherUid) {
         sendPushNotification(otherUid, user.displayName || 'Someone', text, conversationId);
       }

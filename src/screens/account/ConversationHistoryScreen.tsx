@@ -24,6 +24,7 @@ import {
 } from '../../services/firestore';
 import { Routes } from '../../constants/routes';
 import { useToast } from '../../contexts/ToastContext';
+import { useInterstitialAd } from '../../hooks/useInterstitialAd';
 import { AdBanner } from '../../components/common/AdBanner';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -55,6 +56,7 @@ export function ConversationHistoryScreen({ navigation }: any) {
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
   const { showToast } = useToast();
+  const { showAd: showInterstitial } = useInterstitialAd();
   const insets = useSafeAreaInsets();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,8 +93,9 @@ export function ConversationHistoryScreen({ navigation }: any) {
     });
   }, [user?.uid]);
 
-  const handleOpen = (convo: Conversation) => {
+  const handleOpen = async (convo: Conversation) => {
     const myLangCode = (user?.uid && convo.participantLanguages[user.uid]) || 'en';
+    await showInterstitial();
     if (convo.mode === 'faceToFace') {
       const otherLangCode = convo.expectedOtherLanguage || 'en';
       navigation.navigate(Routes.FaceToFace, {
