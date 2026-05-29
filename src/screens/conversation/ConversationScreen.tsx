@@ -37,6 +37,7 @@ import { isSameDay, formatDateLabel } from '../../utils/date';
 import { useInterstitialAd } from '../../hooks/useInterstitialAd';
 import { useRewardedAd } from '../../hooks/useRewardedAd';
 import { AdBanner } from '../../components/common/AdBanner';
+import { useToast } from '../../contexts/ToastContext';
 import { POINTS, getUserPoints, deductPoints, rewardAdWatch } from '../../services/rewards';
 import { getMessageCost } from '../../utils/points';
 
@@ -84,6 +85,7 @@ export function ConversationScreen({ route, navigation }: any) {
   const insets = useSafeAreaInsets();
   const { showAd: showInterstitial } = useInterstitialAd();
   const { showAd: showRewardedAd } = useRewardedAd();
+  const { showToast } = useToast();
 
   useEffect(() => {
     if (!user) return;
@@ -215,6 +217,7 @@ export function ConversationScreen({ route, navigation }: any) {
     const corrected = applyCorrection(inputText, match, replacement);
     setInputText(corrected);
     setSpellMatches([]);
+    showToast('Correction applied', 'success');
   };
 
   const handleSend = async () => {
@@ -343,7 +346,10 @@ export function ConversationScreen({ route, navigation }: any) {
                 borderColor: isDark ? colors.glassBorder : colors.border,
                 backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
               }]}
-              onPress={() => Clipboard.setString(speakText)}
+              onPress={() => {
+                Clipboard.setString(speakText);
+                showToast('Copied to clipboard', 'success');
+              }}
             >
               <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />
             </TouchableOpacity>

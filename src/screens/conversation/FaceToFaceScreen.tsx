@@ -21,6 +21,7 @@ import { FlagEmoji } from '../../components/common/FlagEmoji';
 import * as Speech from 'expo-speech';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useToast } from '../../contexts/ToastContext';
 import { getLanguageByCode } from '../../constants/languages';
 import {
   sendMessage,
@@ -421,6 +422,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   };
 
   const { showAd: showRewardedAd } = useRewardedAd();
+  const { showToast } = useToast();
 
   const handleWatchAdForPoints = async () => {
     if (!user) return;
@@ -560,7 +562,10 @@ export function FaceToFaceScreen({ route, navigation }: any) {
                 borderColor: isDark ? colors.glassBorder : colors.border,
                 backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
               }]}
-              onPress={() => Clipboard.setString(item.translatedText)}
+              onPress={() => {
+                Clipboard.setString(item.translatedText);
+                showToast('Copied to clipboard', 'success');
+              }}
             >
               <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />
             </TouchableOpacity>

@@ -20,11 +20,14 @@ import { FlagEmoji } from '../../components/common/FlagEmoji';
 import { joinConversation } from '../../services/firestore';
 import { Routes } from '../../constants/routes';
 import { useInterstitialAd } from '../../hooks/useInterstitialAd';
+import { useToast } from '../../contexts/ToastContext';
+import { AdBanner } from '../../components/common/AdBanner';
 
 export function JoinScreen({ navigation }: any) {
   const { user, updateUserProfile } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
   const [code, setCode] = useState('');
   const [joining, setJoining] = useState(false);
   const [myLanguage, setMyLanguage] = useState(user?.preferredLanguage || 'en');
@@ -44,6 +47,7 @@ export function JoinScreen({ navigation }: any) {
     try {
       const conversationId = await joinConversation(code.trim(), user.uid, myLanguage);
       await showInterstitial();
+      showToast('Joined conversation', 'success');
       navigation.replace(Routes.Conversation, { conversationId });
     } catch (err: any) {
       Alert.alert('Could not join', err.message || 'Something went wrong. Please try again.');
@@ -131,6 +135,7 @@ export function JoinScreen({ navigation }: any) {
         selectedCode={myLanguage}
         title="Your language"
       />
+      <AdBanner />
     </KeyboardAvoidingView>
   );
 }

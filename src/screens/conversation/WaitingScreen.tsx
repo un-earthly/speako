@@ -11,12 +11,15 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useToast } from '../../contexts/ToastContext';
 import { subscribeToConversation } from '../../services/firestore';
 import { Routes } from '../../constants/routes';
+import { AdBanner } from '../../components/common/AdBanner';
 
 export function WaitingScreen({ route, navigation }: any) {
   const { conversationId, inviteCode } = route.params || {};
   const { colors } = useTheme();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const [copied, setCopied] = useState(false);
 
@@ -33,6 +36,7 @@ export function WaitingScreen({ route, navigation }: any) {
   const handleCopy = () => {
     Clipboard.setString(inviteCode);
     setCopied(true);
+    showToast('Invite code copied', 'success');
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -84,6 +88,7 @@ export function WaitingScreen({ route, navigation }: any) {
           </Text>
         </View>
       </View>
+      <AdBanner />
     </View>
   );
 }

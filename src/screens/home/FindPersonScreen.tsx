@@ -25,6 +25,9 @@ import {
 } from '../../services/firestore';
 import { Routes } from '../../constants/routes';
 import { AdBanner } from '../../components/common/AdBanner';
+import { NativeAdCard } from '../../components/common/NativeAdCard';
+import { useToast } from '../../contexts/ToastContext';
+import { useInterstitialAd } from '../../hooks/useInterstitialAd';
 
 type SearchMode = 'email' | 'phone';
 
@@ -32,6 +35,8 @@ export function FindPersonScreen({ navigation }: any) {
   const { user } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
+  const { showAd: showInterstitial } = useInterstitialAd();
 
   const [mode, setMode] = useState<SearchMode>('email');
   const [query, setQuery] = useState('');
@@ -76,6 +81,7 @@ export function FindPersonScreen({ navigation }: any) {
         foundUser.uid,
         selectedOtherLanguage,
       );
+      await showInterstitial();
       navigation.navigate(Routes.Conversation, { conversationId });
     } catch {
       Alert.alert('Error', 'Could not start the conversation. Please try again.');
@@ -220,6 +226,8 @@ export function FindPersonScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
           )}
+
+          <NativeAdCard style={{ marginTop: 12 }} />
         </View>
       </View>
       <LanguagePickerModal
@@ -229,6 +237,7 @@ export function FindPersonScreen({ navigation }: any) {
         selectedCode={selectedOtherLanguage}
         title="Their language"
       />
+      <AdBanner />
     </KeyboardAvoidingView>
   );
 }

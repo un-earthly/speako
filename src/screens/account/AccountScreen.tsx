@@ -28,7 +28,7 @@ interface Section {
 }
 
 export function AccountScreen({ navigation }: any) {
-  const { user, firebaseUser, logout, updateUserProfile } = useAuth();
+  const { user, firebaseUser, logout, updateUserProfile, resetPassword } = useAuth();
   const { theme, resolvedTheme, colors, isDark } = useTheme();
   const { showToast } = useToast();
   const hasPasswordProvider = firebaseUser?.providerData?.some((p) => p.providerId === 'password') ?? false;
@@ -82,9 +82,17 @@ export function AccountScreen({ navigation }: any) {
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Send Link',
-            onPress: () => {
-              // This would call resetPassword from auth context
-              showToast('Password reset link sent', 'success');
+            onPress: async () => {
+              try {
+                if (user?.email) {
+                  await resetPassword(user.email);
+                  showToast('Password reset link sent to your email', 'success');
+                } else {
+                  showToast('No email found on account', 'error');
+                }
+              } catch (err: any) {
+                showToast(err.message || 'Failed to send reset link', 'error');
+              }
             },
           },
         ],

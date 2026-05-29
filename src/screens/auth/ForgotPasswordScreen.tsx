@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useToast } from '../../contexts/ToastContext';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Routes } from '../../constants/routes';
@@ -15,6 +16,7 @@ export function ForgotPasswordScreen({ navigation }: any) {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
   const { resetPassword } = useAuth();
+  const { showToast } = useToast();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -28,6 +30,7 @@ export function ForgotPasswordScreen({ navigation }: any) {
     try {
       await resetPassword(email);
       setSent(true);
+      showToast('Reset link sent to your email', 'success');
     } catch (err: any) {
       setError(err.message || 'Failed to send reset email');
     } finally {
@@ -51,7 +54,7 @@ export function ForgotPasswordScreen({ navigation }: any) {
             <>
               <Input label="Email Address" placeholder="Enter your email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
-              <Button title="Send OTP Code" onPress={handleSend} loading={false} disabled={loading} />
+              <Button title="Send Reset Link" onPress={handleSend} loading={false} disabled={loading} />
             </>
           ) : (
             <View style={styles.successBox}>

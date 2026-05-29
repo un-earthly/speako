@@ -57,10 +57,10 @@
         }
       ],
       [
-        "@stripe/stripe-react-native",
+        "expo-notifications",
         {
-          "merchantIdentifier": "merchant.com.champaius.speako",
-          "enableGooglePay": true
+          "icon": "./assets/notification-icon.png",
+          "color": "#3381FF"
         }
       ]
     ]

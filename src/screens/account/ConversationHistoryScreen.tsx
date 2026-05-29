@@ -24,6 +24,7 @@ import {
 } from '../../services/firestore';
 import { Routes } from '../../constants/routes';
 import { useToast } from '../../contexts/ToastContext';
+import { AdBanner } from '../../components/common/AdBanner';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -270,6 +271,7 @@ export function ConversationHistoryScreen({ navigation }: any) {
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         />
       )}
+      <AdBanner />
     </View>
   );
 }

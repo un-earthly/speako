@@ -8,6 +8,9 @@ import {
   signOut,
   sendPasswordResetEmail,
   signInWithCredential,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
   type User,
   type UserCredential,
   type OAuthCredential,
@@ -47,6 +50,7 @@ interface AuthContextValue {
   register: (email: string, password: string, displayName: string) => Promise<UserCredential>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
   updateUserProfile: (data: Partial<AppUser>) => Promise<void>;
 }
 
@@ -180,6 +184,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await sendPasswordResetEmail(auth, email);
   };
 
+  const changePassword = async (oldPassword: string, newPassword: string) => {
+    if (!firebaseUser || !firebaseUser.email) throw new Error('No authenticated user');
+    const credential = EmailAuthProvider.credential(firebaseUser.email, oldPassword);
+    await reauthenticateWithCredential(firebaseUser, credential);
+    await updatePassword(firebaseUser, newPassword);
+  };
+
   const updateUserProfile = async (data: Partial<AppUser>) => {
     if (!firebaseUser) return;
     const ref = doc(db, 'users', firebaseUser.uid);
@@ -203,6 +214,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         resetPassword,
+        changePassword,
         updateUserProfile,
       }}
     >

@@ -311,14 +311,16 @@ export function HomeScreen({ navigation }: any) {
                     isWaiting && styles.recentChipWaiting,
                     convo.mode === 'faceToFace' && styles.recentChipFaceToFace,
                   ]}
-                  onPress={() => {
+                  onPress={async () => {
                     if (convo.mode === 'faceToFace') {
+                      await showInterstitial();
                       navigation.navigate(Routes.FaceToFace, {
                         conversationId: convo.id,
                         langA: myLangCode,
                         langB: otherLangCode,
                       });
                     } else {
+                      await showInterstitial();
                       navigation.navigate(
                         isWaiting ? Routes.Waiting : Routes.Conversation,
                         isWaiting
