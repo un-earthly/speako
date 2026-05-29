@@ -88,7 +88,9 @@ export function WaitingScreen({ route, navigation }: any) {
           </Text>
         </View>
       </View>
-      <AdBanner />
+      <View style={{ paddingBottom: insets.bottom + 72 }}>
+        <AdBanner />
+      </View>
     </View>
   );
 }

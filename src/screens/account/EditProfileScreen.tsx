@@ -180,10 +180,13 @@ export function EditProfileScreen({ navigation }: any) {
         </View>
       </ScrollView>
 
-      <AdBanner />
       {/* Fixed save button */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
         <Button title="Save Information" onPress={handleSave} loading={loading} />
+      </View>
+
+      <View style={{ paddingBottom: insets.bottom + 72 }}>
+        <AdBanner />
       </View>
     </View>
   );

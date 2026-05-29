@@ -237,7 +237,9 @@ export function FindPersonScreen({ navigation }: any) {
         selectedCode={selectedOtherLanguage}
         title="Their language"
       />
-      <AdBanner />
+      <View style={{ paddingBottom: insets.bottom + 72 }}>
+        <AdBanner />
+      </View>
     </KeyboardAvoidingView>
   );
 }

@@ -52,9 +52,12 @@ export function ChangeThemeScreen({ navigation }: any) {
           </TouchableOpacity>
         ))}
       </View>
-      <AdBanner />
       <View style={{ height: insets.bottom + 8 }} />
     </ScrollView>
+
+    <View style={{ paddingBottom: insets.bottom + 72 }}>
+      <AdBanner />
+    </View>
   );
 }
 

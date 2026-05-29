@@ -135,7 +135,9 @@ export function JoinScreen({ navigation }: any) {
         selectedCode={myLanguage}
         title="Your language"
       />
-      <AdBanner />
+      <View style={{ paddingBottom: insets.bottom + 72 }}>
+        <AdBanner />
+      </View>
     </KeyboardAvoidingView>
   );
 }
