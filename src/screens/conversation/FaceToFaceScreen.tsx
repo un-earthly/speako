@@ -676,6 +676,8 @@ export function FaceToFaceScreen({ route, navigation }: any) {
           </>
         )}
 
+        <AdBanner />
+
         {/* Messages */}
         <FlatList
           ref={flatListRef}
@@ -711,8 +713,6 @@ export function FaceToFaceScreen({ route, navigation }: any) {
             )}
           </View>
         )}
-
-        <AdBanner />
 
         {/* Cost indicator */}
         <View style={[styles.costIndicator, { borderTopColor: colors.border }]}>

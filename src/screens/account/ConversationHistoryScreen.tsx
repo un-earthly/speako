@@ -89,7 +89,7 @@ export function ConversationHistoryScreen({ navigation }: any) {
             return next;
           });
         })
-        .catch(() => {});
+        .catch(() => { });
     });
   }, [user?.uid]);
 
@@ -274,7 +274,10 @@ export function ConversationHistoryScreen({ navigation }: any) {
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         />
       )}
-      <AdBanner />
+
+      <View style={{ paddingBottom: insets.bottom + 76 }}>
+        <AdBanner />
+      </View>
     </View>
   );
 }

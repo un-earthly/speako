@@ -249,7 +249,7 @@ export function AccountScreen({ navigation }: any) {
         ) : null}
 
         {/* AI Conversation Mode */}
-        <View style={styles.section}>
+        {/* <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
             AI FEATURES
           </Text>
@@ -299,10 +299,13 @@ export function AccountScreen({ navigation }: any) {
               )}
             </View>
           </View>
-        </View>
+        </View> */}
 
-      <AdBanner />
       </ScrollView>
+
+      <View style={{ paddingBottom: insets.bottom + 72 }}>
+        <AdBanner />
+      </View>
 
       <RewardModal
         visible={showRewardModal}

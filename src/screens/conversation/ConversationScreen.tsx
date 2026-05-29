@@ -61,7 +61,7 @@ function WordHighlight({ text, baseStyle }: { text: string; baseStyle: any }) {
 export function ConversationScreen({ route, navigation }: any) {
   const { conversationId } = route.params || {};
   const { user } = useAuth();
-  const aiModeEnabled = user?.aiConversationEnabled ?? false;
+
   const { colors, isDark } = useTheme();
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -73,7 +73,7 @@ export function ConversationScreen({ route, navigation }: any) {
   const [isRecording, setIsRecording] = useState(false);
   const [voicePartial, setVoicePartial] = useState('');
   const [langMismatch, setLangMismatch] = useState(false);
-  const [useAITranslation, setUseAITranslation] = useState(false);
+
   const [userPoints, setUserPoints] = useState(0);
   const [showPointsBanner, setShowPointsBanner] = useState(false);
   const flatListRef = useRef<FlatList>(null);
@@ -208,7 +208,7 @@ export function ConversationScreen({ route, navigation }: any) {
 
     setIsPreviewLoading(true);
     previewTimer.current = setTimeout(async () => {
-      const preview = await translateText(text, myLanguage, otherLanguage, aiModeEnabled && useAITranslation);
+      const preview = await translateText(text, myLanguage, otherLanguage);
       setTranslationPreview(preview !== text ? preview : '');
       setIsPreviewLoading(false);
     }, 900);
@@ -241,7 +241,7 @@ export function ConversationScreen({ route, navigation }: any) {
     clearTimeout(previewTimer.current);
     setSending(true);
     try {
-      const translated = await translateText(text, myLanguage, otherLanguage, aiModeEnabled && useAITranslation);
+      const translated = await translateText(text, myLanguage, otherLanguage);
 
       const ok = await deductPoints(user.uid, cost, 'message', conversationId);
       if (ok) {
@@ -437,6 +437,8 @@ export function ConversationScreen({ route, navigation }: any) {
           </TouchableOpacity>
         </View>
 
+        <AdBanner />
+
         {/* Messages */}
         <FlatList
           ref={flatListRef}
@@ -525,32 +527,6 @@ export function ConversationScreen({ route, navigation }: any) {
               <Text style={styles.pointsBannerBtnText}>Watch Ad +{POINTS.WATCH_AD_BASE}</Text>
             </TouchableOpacity>
           </View>
-        )}
-
-        <AdBanner />
-
-        {/* AI toggle */}
-        {aiModeEnabled ? (
-          <TouchableOpacity
-            onPress={() => setUseAITranslation((v) => !v)}
-            style={[styles.aiToggle, { backgroundColor: isDark ? 'rgba(0,122,255,0.15)' : '#E8F2FF', borderTopColor: colors.border }]}
-          >
-            <Ionicons name="sparkles" size={14} color="#007AFF" />
-            <Text style={[styles.aiToggleText, { color: '#007AFF' }]}>
-              {useAITranslation ? 'AI Translation ON' : 'AI Translation OFF'}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            onPress={() => navigation.navigate(Routes.Subscribe)}
-            style={[styles.premiumBanner, { backgroundColor: isDark ? 'rgba(255,165,0,0.15)' : '#FFF8E1', borderTopColor: colors.border }]}
-          >
-            <Ionicons name="sparkles" size={14} color="#FF9500" />
-            <Text style={[styles.premiumBannerText, { color: '#FF9500' }]}>
-              Upgrade to Premium for AI translations
-            </Text>
-            <Ionicons name="chevron-forward" size={14} color="#FF9500" />
-          </TouchableOpacity>
         )}
 
         {/* Input bar */}
@@ -754,30 +730,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     flex: 1,
-  },
-  aiToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  aiToggleText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  premiumBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  premiumBannerText: {
-    fontSize: 12,
-    fontWeight: '700',
   },
   pointsBanner: {
     flexDirection: 'row',
