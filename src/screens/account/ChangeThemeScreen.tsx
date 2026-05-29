@@ -18,45 +18,47 @@ export function ChangeThemeScreen({ navigation }: any) {
   ];
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={22} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Theme</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <View style={styles.list}>
-        {options.map((option) => (
-          <TouchableOpacity
-            key={option.key}
-            style={[styles.item, { borderBottomColor: colors.border }]}
-            onPress={() => {
-              setTheme(option.key);
-              showToast('Theme updated', 'success');
-            }}
-          >
-            <View style={styles.textCol}>
-              <Text style={[styles.label, { color: colors.text }]}>{option.label}</Text>
-              <Text style={[styles.desc, { color: colors.textSecondary }]}>{option.description}</Text>
-            </View>
-            <View style={[styles.radio, { borderColor: theme === option.key ? '#007AFF' : colors.border }]}>
-              {theme === option.key && <View style={styles.radioDot} />}
-            </View>
-            {option.key === 'system' && (
-              <Text style={[styles.preview, { color: colors.textSecondary }]}>
-                Preview: {resolvedTheme === 'dark' ? 'Dark' : 'Light'}
-              </Text>
-            )}
+    <View style={{ flex: 1 }}>
+      <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={22} color={colors.text} />
           </TouchableOpacity>
-        ))}
-      </View>
-      <View style={{ height: insets.bottom + 8 }} />
-    </ScrollView>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Theme</Text>
+          <View style={{ width: 40 }} />
+        </View>
 
-    <View style={{ paddingBottom: insets.bottom + 72 }}>
-      <AdBanner />
+        <View style={styles.list}>
+          {options.map((option) => (
+            <TouchableOpacity
+              key={option.key}
+              style={[styles.item, { borderBottomColor: colors.border }]}
+              onPress={() => {
+                setTheme(option.key);
+                showToast('Theme updated', 'success');
+              }}
+            >
+              <View style={styles.textCol}>
+                <Text style={[styles.label, { color: colors.text }]}>{option.label}</Text>
+                <Text style={[styles.desc, { color: colors.textSecondary }]}>{option.description}</Text>
+              </View>
+              <View style={[styles.radio, { borderColor: theme === option.key ? '#007AFF' : colors.border }]}>
+                {theme === option.key && <View style={styles.radioDot} />}
+              </View>
+              {option.key === 'system' && (
+                <Text style={[styles.preview, { color: colors.textSecondary }]}>
+                  Preview: {resolvedTheme === 'dark' ? 'Dark' : 'Light'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={{ height: insets.bottom + 8 }} />
+      </ScrollView>
+
+      <View style={{ paddingBottom: insets.bottom + 72 }}>
+        <AdBanner />
+      </View>
     </View>
   );
 }

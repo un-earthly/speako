@@ -23,35 +23,37 @@ export function ChangeLanguageScreen({ navigation }: any) {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={22} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Change Language</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <View style={styles.list}>
-        {LANGUAGES.map((lang) => (
-          <TouchableOpacity
-            key={lang.code}
-            style={[styles.item, { borderBottomColor: colors.border }]}
-            onPress={() => selectLanguage(lang.code)}
-          >
-            <FlagEmoji countryCode={lang.countryCode} size={22} />
-            <Text style={[styles.langName, { color: colors.text }]}>{lang.name}</Text>
-            {currentLang === lang.code && (
-              <Ionicons name="checkmark" size={20} color="#007AFF" />
-            )}
+    <View style={{ flex: 1 }}>
+      <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={22} color={colors.text} />
           </TouchableOpacity>
-        ))}
-      </View>
-      <View style={{ height: insets.bottom + 8 }} />
-    </ScrollView>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Change Language</Text>
+          <View style={{ width: 40 }} />
+        </View>
 
-    <View style={{ paddingBottom: insets.bottom + 72 }}>
-      <AdBanner />
+        <View style={styles.list}>
+          {LANGUAGES.map((lang) => (
+            <TouchableOpacity
+              key={lang.code}
+              style={[styles.item, { borderBottomColor: colors.border }]}
+              onPress={() => selectLanguage(lang.code)}
+            >
+              <FlagEmoji countryCode={lang.countryCode} size={22} />
+              <Text style={[styles.langName, { color: colors.text }]}>{lang.name}</Text>
+              {currentLang === lang.code && (
+                <Ionicons name="checkmark" size={20} color="#007AFF" />
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={{ height: insets.bottom + 8 }} />
+      </ScrollView>
+
+      <View style={{ paddingBottom: insets.bottom + 72 }}>
+        <AdBanner />
+      </View>
     </View>
   );
 }
