@@ -13,7 +13,7 @@
 |------|---------|--------|-------|
 | Firebase Spark (free tier) | $0 | $0 | Auth, Firestore, Hosting, Analytics |
 | Expo / EAS Build | $0 | $0 | Free tier covers basic builds |
-| Google Play Developer | — | $25 one-time | Already paid |
+| Google Play Developer | — | $25 one-time | |
 | Apple Developer | — | $99/year | Required for iOS builds |
 | **Fixed total** | **~$8** | **~$99** | Just Apple dev + rounding |
 
@@ -35,7 +35,7 @@
 | DeepL | Not configured | 500K chars/mo free, then ~$0.00002/char | LOW — stable but needs key |
 | MyMemory | Fallback | Free | MED — rate limits, 480char cap |
 | LibreTranslate | Last resort | Free | HIGH — public instance, slow |
-| OpenAI | **BROKEN** in code | Would be $5–30/mo at 1K DAU | N/A — wrong endpoint |
+| OpenAI | Not Implemented | Would be $5–30/mo at 1K DAU | |
 
 **Current translation cost: $0/month** (riding free APIs).
 **If Google endpoint breaks and you switch to DeepL paid:** ~$10–50/month depending on volume.

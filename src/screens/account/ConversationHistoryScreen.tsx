@@ -245,8 +245,11 @@ export function ConversationHistoryScreen({ navigation }: any) {
         <Text style={[styles.headerTitle, { color: colors.text }]}>Conversations</Text>
       </View>
 
+      <View style={{ flex: 1 }}>
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color="#007AFF" />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator color="#007AFF" />
+        </View>
       ) : conversations.length === 0 ? (
         <View style={styles.empty}>
           <View
@@ -269,13 +272,15 @@ export function ConversationHistoryScreen({ navigation }: any) {
           data={conversations}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 100 }]}
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 16 }]}
           showsVerticalScrollIndicator={false}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         />
       )}
+      </View>
 
-      <View style={{ paddingBottom: insets.bottom + 76 }}>
+      <View style={{ paddingBottom: insets.bottom + 72 }}>
         <AdBanner />
       </View>
     </View>
