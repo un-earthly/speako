@@ -10,6 +10,7 @@ import { Routes } from '../../constants/routes';
 import { useRewardedAd } from '../../hooks/useRewardedAd';
 import { RewardModal } from '../../components/common/RewardModal';
 import { rewardAdWatch, POINTS, unlockAIConversation } from '../../services/rewards';
+import { sendPushNotification } from '../../services/notifications';
 import { AdBanner } from '../../components/common/AdBanner';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];

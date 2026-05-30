@@ -80,9 +80,18 @@ function RootNavigator() {
   );
 }
 
+// Add test device IDs here for release-build testing.
+// Your device: D113027F52E2730998D29DE1A46489DA
+const TEST_DEVICE_IDS: string[] = ['D113027F52E2730998D29DE1A46489DA'];
+
 export function App() {
   useEffect(() => {
-    MobileAds().initialize().catch(() => {});
+    MobileAds()
+      .setRequestConfiguration({
+        testDeviceIdentifiers: TEST_DEVICE_IDS,
+      })
+      .then(() => MobileAds().initialize())
+      .catch(() => {});
   }, []);
 
   return (

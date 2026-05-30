@@ -1,10 +1,9 @@
 import React from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+import { AdUnitIds } from '../../constants/ads';
 
-const PRODUCTION_BANNER_ID = 'ca-app-pub-6826771706478909/7195640912';
-
-const adUnitId = __DEV__ ? TestIds.BANNER : PRODUCTION_BANNER_ID;
+const adUnitId = AdUnitIds.BANNER;
 
 export function AdBanner() {
   if (Platform.OS === 'web') {
