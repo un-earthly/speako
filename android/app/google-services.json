@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "35824657921-jpair9plfgaisqluo84af4hvo4koaf9j.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.champaius.speako",
+            "certificate_hash": "489a5c31d44ecb729554170d0820c17adfe2fcbe"
+          }
+        },
+        {
           "client_id": "35824657921-mscrvqfkjv88mh17cd3ou402fusg2d8n.apps.googleusercontent.com",
           "client_type": 3
         }
