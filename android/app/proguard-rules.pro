@@ -11,4 +11,13 @@
 -keep class com.swmansion.reanimated.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 
+# Google Mobile Ads (react-native-google-mobile-ads)
+-keep class com.google.android.gms.ads.** { *; }
+-keep class io.invertase.googlemobileads.** { *; }
+
+# Firebase / FCM
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.android.gms.**
+
 # Add any project specific keep options here:

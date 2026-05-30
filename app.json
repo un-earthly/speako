@@ -14,21 +14,28 @@
     "scheme": "speako",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.champaius.speako"
+      "bundleIdentifier": "com.champaius.speako",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Allow Speako to use speech recognition to transcribe your voice",
+        "NSMicrophoneUsageDescription": "Allow Speako to access your microphone for voice messages"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#3381FF"
       },
-      "package": "com.champaius.speako"
+      "package": "com.champaius.speako",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
       "eas": {
-        "projectId": "d38bfccf-2b75-467b-889e-11a9a966a5c0"
+        "projectId": "462239e7-60bd-4c41-8ce6-8d4523bfdea1"
       }
     },
     "plugins": [
@@ -59,10 +66,11 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/notification-icon.png",
+          "icon": "./assets/icon.png",
           "color": "#3381FF"
         }
       ]
-    ]
+    ],
+    "owner": "champius"
   }
 }

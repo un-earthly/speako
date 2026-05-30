@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "35824657921",
+    "project_id": "speako-b701f",
+    "storage_bucket": "speako-b701f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:35824657921:android:2baf40f66ba716fd924200",
+        "android_client_info": {
+          "package_name": "com.champaius.speako"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "35824657921-iigvm6jom6l88fu6i24aelpp82c6smij.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.champaius.speako",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "35824657921-mscrvqfkjv88mh17cd3ou402fusg2d8n.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyADWttEExKYBsaKotZ9JhR46IFy79CnOTY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "35824657921-mscrvqfkjv88mh17cd3ou402fusg2d8n.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "35824657921-jmgkbjtmp7dpj902lao3fo8eo44ia6gv.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.champaius.speako"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

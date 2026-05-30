@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { useAppOpenAd } from './hooks/useAppOpenAd';
+import { MobileAds } from 'react-native-google-mobile-ads';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { SplashScreen as CustomSplash } from './screens/auth/SplashScreen';
 import { AuthNavigator } from './navigation/AuthNavigator';
@@ -80,6 +81,10 @@ function RootNavigator() {
 }
 
 export function App() {
+  useEffect(() => {
+    MobileAds().initialize().catch(() => {});
+  }, []);
+
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={styles.gestureRoot}>
