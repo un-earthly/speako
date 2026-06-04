@@ -1,0 +1,107 @@
+[debug] [2026-06-04T14:07:55.853Z] ----------------------------------------------------------------------
+[debug] [2026-06-04T14:07:55.855Z] Command:       /home/normod/.nvm/versions/node/v26.2.0/bin/node /home/normod/.nvm/versions/node/v26.2.0/bin/firebase deploy --only functions
+[debug] [2026-06-04T14:07:55.855Z] CLI Version:   15.19.0
+[debug] [2026-06-04T14:07:55.855Z] Platform:      linux
+[debug] [2026-06-04T14:07:55.855Z] Node Version:  v26.2.0
+[debug] [2026-06-04T14:07:55.855Z] Time:          Thu Jun 04 2026 20:07:55 GMT+0600 (Bangladesh Standard Time)
+[debug] [2026-06-04T14:07:55.855Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-06-04T14:07:56.579Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-06-04T14:07:56.579Z] > authorizing via signed-in user (ceo.champaius@gmail.com)
+[debug] [2026-06-04T14:07:56.579Z] [iam] checking project speako-b701f for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2026-06-04T14:07:56.580Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:07:56.580Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:07:56.581Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/speako-b701f:testIamPermissions [none]
+[debug] [2026-06-04T14:07:56.581Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/speako-b701f:testIamPermissions  x-goog-user-project=speako-b701f
+[debug] [2026-06-04T14:07:56.581Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/speako-b701f:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-06-04T14:07:58.196Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/speako-b701f:testIamPermissions 200
+[debug] [2026-06-04T14:07:58.196Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/speako-b701f:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-06-04T14:07:58.196Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:07:58.196Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:07:58.196Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/speako-b701f/serviceAccounts/speako-b701f@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-06-04T14:07:58.197Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/speako-b701f/serviceAccounts/speako-b701f@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-06-04T14:08:00.116Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/speako-b701f/serviceAccounts/speako-b701f@appspot.gserviceaccount.com:testIamPermissions 404
+[debug] [2026-06-04T14:08:00.116Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/speako-b701f/serviceAccounts/speako-b701f@appspot.gserviceaccount.com:testIamPermissions {"error":{"code":404,"message":"Unknown service account","status":"NOT_FOUND"}}
+[debug] [2026-06-04T14:08:00.117Z] [functions] service account IAM check errored, deploy may fail: Request to https://iam.googleapis.com/v1/projects/speako-b701f/serviceAccounts/speako-b701f@appspot.gserviceaccount.com:testIamPermissions had HTTP Error: 404, Unknown service account {"name":"FirebaseError","children":[],"context":{"body":{"error":{"code":404,"message":"Unknown service account","status":"NOT_FOUND"}},"response":{"statusCode":404}},"exit":1,"message":"Request to https://iam.googleapis.com/v1/projects/speako-b701f/serviceAccounts/speako-b701f@appspot.gserviceaccount.com:testIamPermissions had HTTP Error: 404, Unknown service account","status":404}
+[info] 
+[info] === Deploying to 'speako-b701f'...
+[info] 
+[info] i  deploying functions 
+[debug] [2026-06-04T14:08:00.119Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:00.119Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:00.119Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudresourcemanager.googleapis.com [none]
+[debug] [2026-06-04T14:08:00.119Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudresourcemanager.googleapis.com  x-goog-user-project=speako-b701f
+[debug] [2026-06-04T14:08:01.967Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudresourcemanager.googleapis.com 200
+[debug] [2026-06-04T14:08:01.967Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudresourcemanager.googleapis.com [omitted]
+[debug] [2026-06-04T14:08:01.973Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:01.973Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:01.974Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/speako-b701f [none]
+[debug] [2026-06-04T14:08:02.380Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/speako-b701f 200
+[debug] [2026-06-04T14:08:02.381Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/speako-b701f {"projectNumber":"35824657921","projectId":"speako-b701f","lifecycleState":"ACTIVE","name":"Speako","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2026-05-24T05:38:46.461Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[debug] [2026-06-04T14:08:02.382Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:02.382Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:02.382Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:02.382Z] Checked if tokens are valid: true, expires at: 1780585653342
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[debug] [2026-06-04T14:08:02.382Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:02.382Z] Checked if tokens are valid: true, expires at: 1780585653342
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2026-06-04T14:08:02.383Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:02.383Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:02.383Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudfunctions.googleapis.com [none]
+[debug] [2026-06-04T14:08:02.383Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudfunctions.googleapis.com  x-goog-user-project=speako-b701f
+[debug] [2026-06-04T14:08:02.383Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/runtimeconfig.googleapis.com [none]
+[debug] [2026-06-04T14:08:02.383Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/runtimeconfig.googleapis.com  x-goog-user-project=speako-b701f
+[debug] [2026-06-04T14:08:02.384Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudbuild.googleapis.com [none]
+[debug] [2026-06-04T14:08:02.384Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudbuild.googleapis.com  x-goog-user-project=speako-b701f
+[debug] [2026-06-04T14:08:02.385Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/artifactregistry.googleapis.com [none]
+[debug] [2026-06-04T14:08:02.385Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/artifactregistry.googleapis.com  x-goog-user-project=speako-b701f
+[debug] [2026-06-04T14:08:03.778Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudfunctions.googleapis.com 200
+[debug] [2026-06-04T14:08:03.778Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudfunctions.googleapis.com [omitted]
+[warn] ⚠  functions: missing required API cloudfunctions.googleapis.com. Enabling now... 
+[debug] [2026-06-04T14:08:03.778Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:03.779Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:03.779Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudfunctions.googleapis.com:enable [none]
+[debug] [2026-06-04T14:08:03.779Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudfunctions.googleapis.com:enable  x-goog-user-project=speako-b701f
+[debug] [2026-06-04T14:08:04.169Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudbuild.googleapis.com 200
+[debug] [2026-06-04T14:08:04.169Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudbuild.googleapis.com [omitted]
+[warn] ⚠  functions: missing required API cloudbuild.googleapis.com. Enabling now... 
+[debug] [2026-06-04T14:08:04.170Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:04.170Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:04.170Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudbuild.googleapis.com:enable [none]
+[debug] [2026-06-04T14:08:04.170Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudbuild.googleapis.com:enable  x-goog-user-project=speako-b701f
+[debug] [2026-06-04T14:08:04.198Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/runtimeconfig.googleapis.com 200
+[debug] [2026-06-04T14:08:04.198Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/runtimeconfig.googleapis.com [omitted]
+[debug] [2026-06-04T14:08:04.228Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/artifactregistry.googleapis.com 200
+[debug] [2026-06-04T14:08:04.228Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/artifactregistry.googleapis.com [omitted]
+[warn] ⚠  artifactregistry: missing required API artifactregistry.googleapis.com. Enabling now... 
+[debug] [2026-06-04T14:08:04.228Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:04.228Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:04.228Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/artifactregistry.googleapis.com:enable [none]
+[debug] [2026-06-04T14:08:04.228Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/artifactregistry.googleapis.com:enable  x-goog-user-project=speako-b701f
+[debug] [2026-06-04T14:08:04.366Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudfunctions.googleapis.com:enable 200
+[debug] [2026-06-04T14:08:04.366Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudfunctions.googleapis.com:enable [omitted]
+[debug] [2026-06-04T14:08:05.923Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/artifactregistry.googleapis.com:enable 200
+[debug] [2026-06-04T14:08:05.923Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/artifactregistry.googleapis.com:enable [omitted]
+[debug] [2026-06-04T14:08:05.978Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudbuild.googleapis.com:enable 200
+[debug] [2026-06-04T14:08:05.979Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/cloudbuild.googleapis.com:enable [omitted]
+[debug] [2026-06-04T14:08:15.986Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:15.987Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:15.987Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/speako-b701f/adminSdkConfig [none]
+[debug] [2026-06-04T14:08:16.474Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/speako-b701f/adminSdkConfig 200
+[debug] [2026-06-04T14:08:16.475Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/speako-b701f/adminSdkConfig {"projectId":"speako-b701f","storageBucket":"speako-b701f.firebasestorage.app"}
+[debug] [2026-06-04T14:08:16.476Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:16.476Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:16.476Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/speako-b701f/configs [none]
+[debug] [2026-06-04T14:08:17.951Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/speako-b701f/configs 200
+[debug] [2026-06-04T14:08:17.951Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/speako-b701f/configs {"configs":[{"name":"projects/speako-b701f/configs/stripe"}]}
+[debug] [2026-06-04T14:08:17.952Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:17.952Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:17.952Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/speako-b701f/configs/stripe/variables [none]
+[debug] [2026-06-04T14:08:18.306Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/speako-b701f/configs/stripe/variables 200
+[debug] [2026-06-04T14:08:18.307Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/speako-b701f/configs/stripe/variables {"variables":[{"name":"projects/speako-b701f/configs/stripe/variables/secret_key","updateTime":"2026-05-27T20:14:08.394004952Z"}]}
+[debug] [2026-06-04T14:08:18.307Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:18.308Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:18.308Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/speako-b701f/configs/stripe/variables/secret_key [none]

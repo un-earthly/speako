@@ -64,7 +64,11 @@ export function SignUpScreen({ navigation }: any) {
         displayName: displayName.trim(),
       });
     } catch (err: any) {
-      showToast(err.message || 'Failed to send code. Please try again.', 'error');
+      const code = err?.code ?? '';
+      const msg = code.includes('not-found') || code.includes('unavailable')
+        ? 'Service not available yet. Please try again later.'
+        : err.message || 'Failed to send code. Please try again.';
+      showToast(msg, 'error');
     } finally {
       setLoading(false);
     }
