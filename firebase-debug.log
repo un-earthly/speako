@@ -105,3 +105,72 @@
 [debug] [2026-06-04T14:08:18.307Z] Checked if tokens are valid: true, expires at: 1780585653342
 [debug] [2026-06-04T14:08:18.308Z] Checked if tokens are valid: true, expires at: 1780585653342
 [debug] [2026-06-04T14:08:18.308Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/speako-b701f/configs/stripe/variables/secret_key [none]
+[debug] [2026-06-04T14:08:23.108Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/speako-b701f/configs/stripe/variables/secret_key 200
+[debug] [2026-06-04T14:08:23.109Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/speako-b701f/configs/stripe/variables/secret_key {"name":"projects/speako-b701f/configs/stripe/variables/secret_key","updateTime":"2026-05-27T20:14:08.394004952Z","text":"sk-kimi-AHLS3KaemrHOUrqMa8vAVE87mUI2piQW0u5X7BH1JcZ7F1IyvhHZyIbguYTGjPYMEXPO_PUBLIC_STRIPE_SECRET_KEY"}
+[debug] [2026-06-04T14:08:23.111Z] Validating nodejs source
+[warn] ⚠  functions: Runtime Node.js 20 was deprecated on 2026-04-30 and will be decommissioned on 2026-10-30, after which you will not be able to deploy without upgrading. Consider upgrading now to avoid disruption. See https://cloud.google.com/functions/docs/runtime-support for full details on the lifecycle policy 
+[warn] ⚠  functions: package.json indicates an outdated version of firebase-functions. Please upgrade using npm install --save firebase-functions@latest in your functions directory. 
+[warn] ⚠  functions: Please note that there will be breaking changes when you upgrade. 
+[debug] [2026-06-04T14:08:23.855Z] > [functions] package.json contents: {
+  "name": "speako-functions",
+  "description": "Speako Firebase Cloud Functions",
+  "scripts": {
+    "deploy": "firebase deploy --only functions"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.0.0",
+    "nodemailer": "^6.9.16"
+  },
+  "private": true
+}
+[debug] [2026-06-04T14:08:23.855Z] Building nodejs source
+[info] i  functions: Loading and analyzing source code for codebase default to determine what to deploy 
+[debug] [2026-06-04T14:08:23.856Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-06-04T14:08:23.861Z] Found firebase-functions binary at '/home/normod/Desktop/projects/speako/functions/node_modules/.bin/firebase-functions'
+[info] Serving at port 8247
+
+[debug] [2026-06-04T14:08:24.206Z] Got response from /__/functions.yaml {"endpoints":{"sendOTP":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["us-central1"],"labels":{},"callableTrigger":{},"entryPoint":"sendOTP"},"verifyOTP":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["us-central1"],"labels":{},"callableTrigger":{},"entryPoint":"verifyOTP"}},"specVersion":"v1alpha1","requiredAPIs":[],"extensions":{},"params":[{"name":"GMAIL_USER","type":"string"},{"name":"GMAIL_APP_PASSWORD","type":"string"}]}
+[debug] [2026-06-04T14:08:28.229Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:28.229Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:28.229Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v1/projects/speako-b701f/locations/-/functions [none]
+[debug] [2026-06-04T14:08:29.162Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v1/projects/speako-b701f/locations/-/functions 200
+[debug] [2026-06-04T14:08:29.163Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v1/projects/speako-b701f/locations/-/functions {}
+[debug] [2026-06-04T14:08:29.163Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:29.163Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:29.163Z] >>> [apiv2][query] GET https://cloudfunctions.googleapis.com/v2/projects/speako-b701f/locations/-/functions filter=environment%3D%22GEN_2%22
+[debug] [2026-06-04T14:08:30.831Z] <<< [apiv2][status] GET https://cloudfunctions.googleapis.com/v2/projects/speako-b701f/locations/-/functions 200
+[debug] [2026-06-04T14:08:30.831Z] <<< [apiv2][body] GET https://cloudfunctions.googleapis.com/v2/projects/speako-b701f/locations/-/functions {}
+[info] i  extensions: ensuring required API firebaseextensions.googleapis.com is enabled... 
+[debug] [2026-06-04T14:08:30.838Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:30.839Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:30.839Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/firebaseextensions.googleapis.com [none]
+[debug] [2026-06-04T14:08:30.839Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/firebaseextensions.googleapis.com  x-goog-user-project=speako-b701f
+[debug] [2026-06-04T14:08:32.649Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/firebaseextensions.googleapis.com 200
+[debug] [2026-06-04T14:08:32.649Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/firebaseextensions.googleapis.com [omitted]
+[warn] ⚠  extensions: missing required API firebaseextensions.googleapis.com. Enabling now... 
+[debug] [2026-06-04T14:08:32.649Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:32.649Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:32.649Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/firebaseextensions.googleapis.com:enable [none]
+[debug] [2026-06-04T14:08:32.649Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/firebaseextensions.googleapis.com:enable  x-goog-user-project=speako-b701f
+[debug] [2026-06-04T14:08:34.465Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/firebaseextensions.googleapis.com:enable 200
+[debug] [2026-06-04T14:08:34.465Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/speako-b701f/services/firebaseextensions.googleapis.com:enable [omitted]
+[debug] [2026-06-04T14:08:44.487Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-06-04T14:08:44.487Z] > authorizing via signed-in user (ceo.champaius@gmail.com)
+[debug] [2026-06-04T14:08:44.487Z] [iam] checking project speako-b701f for permissions ["firebase.projects.get","firebaseextensions.instances.list"]
+[debug] [2026-06-04T14:08:44.487Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:44.487Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:44.487Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/speako-b701f:testIamPermissions [none]
+[debug] [2026-06-04T14:08:44.487Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/speako-b701f:testIamPermissions  x-goog-user-project=speako-b701f
+[debug] [2026-06-04T14:08:44.488Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/speako-b701f:testIamPermissions {"permissions":["firebase.projects.get","firebaseextensions.instances.list"]}
+[debug] [2026-06-04T14:08:46.061Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/speako-b701f:testIamPermissions 200
+[debug] [2026-06-04T14:08:46.061Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/speako-b701f:testIamPermissions {"permissions":["firebase.projects.get","firebaseextensions.instances.list"]}
+[debug] [2026-06-04T14:08:46.061Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:46.061Z] Checked if tokens are valid: true, expires at: 1780585653342
+[debug] [2026-06-04T14:08:46.061Z] >>> [apiv2][query] GET https://firebaseextensions.googleapis.com/v1beta/projects/speako-b701f/instances pageSize=100&pageToken=
+[debug] [2026-06-04T14:08:50.565Z] <<< [apiv2][status] GET https://firebaseextensions.googleapis.com/v1beta/projects/speako-b701f/instances 200
+[debug] [2026-06-04T14:08:50.565Z] <<< [apiv2][body] GET https://firebaseextensions.googleapis.com/v1beta/projects/speako-b701f/instances {}
