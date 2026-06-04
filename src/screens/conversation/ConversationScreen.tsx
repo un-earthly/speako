@@ -18,7 +18,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { FlagEmoji } from '../../components/common/FlagEmoji';
-import * as Speech from 'expo-speech';
+import { speakText as speakTTS, pauseSpeaking, resumeSpeaking } from '../../services/tts';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Routes } from '../../constants/routes';
@@ -73,6 +73,9 @@ export function ConversationScreen({ route, navigation }: any) {
   const [isRecording, setIsRecording] = useState(false);
   const [voicePartial, setVoicePartial] = useState('');
   const [langMismatch, setLangMismatch] = useState(false);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [pausedId, setPausedId] = useState<string | null>(null);
 
   const [userPoints, setUserPoints] = useState(0);
   const [showPointsBanner, setShowPointsBanner] = useState(false);
@@ -278,8 +281,7 @@ export function ConversationScreen({ route, navigation }: any) {
     const isMe = item.senderId === user?.uid;
     const primaryText = item.translatedText;
     const secondaryText = item.originalText;
-    const speakText = isMe ? item.translatedText : item.originalText;
-    const speakLang = isMe ? item.targetLanguage : item.sourceLanguage;
+    const speakText = isMe ? item.originalText : item.translatedText;
     const avatarCountryCode = isMe
       ? (myLang?.countryCode ?? 'US')
       : (otherLang?.countryCode ?? 'US');
@@ -342,9 +344,38 @@ export function ConversationScreen({ route, navigation }: any) {
                 borderColor: isDark ? colors.glassBorder : colors.border,
                 backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
               }]}
-              onPress={() => Speech.speak(speakText, { language: speakLang })}
+              disabled={loadingId === item.id}
+              onPress={async () => {
+                if (playingId === item.id) {
+                  pauseSpeaking();
+                  setPlayingId(null);
+                  setPausedId(item.id);
+                  return;
+                }
+                if (pausedId === item.id) {
+                  resumeSpeaking();
+                  setPlayingId(item.id);
+                  setPausedId(null);
+                  return;
+                }
+                setPlayingId(null);
+                setPausedId(null);
+                setLoadingId(item.id);
+                try {
+                  await speakTTS(speakText, () => { setPlayingId(null); setPausedId(null); });
+                  setPlayingId(item.id);
+                } finally {
+                  setLoadingId(null);
+                }
+              }}
             >
-              <Ionicons name="play-outline" size={14} color={colors.textSecondary} />
+              {loadingId === item.id
+                ? <ActivityIndicator size={14} color={colors.textSecondary} />
+                : <Ionicons
+                    name={playingId === item.id ? 'pause-outline' : 'play-outline'}
+                    size={14}
+                    color={pausedId === item.id ? '#007AFF' : colors.textSecondary}
+                  />}
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, {
@@ -444,7 +475,12 @@ export function ConversationScreen({ route, navigation }: any) {
           ref={flatListRef}
           data={messages}
           keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
+          renderItem={(info) => (
+            <>
+              {renderMessage(info)}
+              {(info.index + 1) % 10 === 0 && <AdBanner />}
+            </>
+          )}
           contentContainerStyle={styles.messagesList}
           ListEmptyComponent={
             <View style={styles.emptyState}>

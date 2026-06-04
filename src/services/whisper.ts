@@ -1,7 +1,7 @@
-const API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY ?? '';
+const API_KEY = process.env.EXPO_PUBLIC_OPENAI_KEY ?? '';
 
 export async function transcribeAudio(uri: string): Promise<string> {
-  if (!API_KEY) throw new Error('EXPO_PUBLIC_OPENAI_API_KEY is not set');
+  if (!API_KEY) throw new Error('EXPO_PUBLIC_OPENAI_KEY is not set');
 
   const formData = new FormData();
   formData.append('file', {

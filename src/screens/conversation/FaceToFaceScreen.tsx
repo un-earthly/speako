@@ -18,7 +18,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { FlagEmoji } from '../../components/common/FlagEmoji';
-import * as Speech from 'expo-speech';
+import { speakText, pauseSpeaking, resumeSpeaking } from '../../services/tts';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -62,6 +62,9 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [userPoints, setUserPoints] = useState(authPoints);
   const [showPointsBanner, setShowPointsBanner] = useState(false);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [pausedId, setPausedId] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -410,9 +413,38 @@ export function FaceToFaceScreen({ route, navigation }: any) {
                 borderColor: isDark ? colors.glassBorder : colors.border,
                 backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
               }]}
-              onPress={() => Speech.speak(item.translatedText, { language: item.targetLanguage })}
+              disabled={loadingId === item.id}
+              onPress={async () => {
+                if (playingId === item.id) {
+                  pauseSpeaking();
+                  setPlayingId(null);
+                  setPausedId(item.id);
+                  return;
+                }
+                if (pausedId === item.id) {
+                  resumeSpeaking();
+                  setPlayingId(item.id);
+                  setPausedId(null);
+                  return;
+                }
+                setPlayingId(null);
+                setPausedId(null);
+                setLoadingId(item.id);
+                try {
+                  await speakText(item.translatedText, () => { setPlayingId(null); setPausedId(null); });
+                  setPlayingId(item.id);
+                } finally {
+                  setLoadingId(null);
+                }
+              }}
             >
-              <Ionicons name="play-outline" size={14} color={colors.textSecondary} />
+              {loadingId === item.id
+                ? <ActivityIndicator size={14} color={colors.textSecondary} />
+                : <Ionicons
+                    name={playingId === item.id ? 'pause-outline' : 'play-outline'}
+                    size={14}
+                    color={pausedId === item.id ? '#007AFF' : colors.textSecondary}
+                  />}
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, {
