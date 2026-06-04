@@ -1,5 +1,5 @@
 import { getLanguageByCode } from '../constants/languages';
-import { translateWithAI } from './ai-translation';
+import { translateWithAI, detectAndTranslate } from './ai-translation';
 
 // Optional DeepL key — set to unlock 500K chars/month free tier
 const DEEPL_API_KEY = '';
@@ -133,10 +133,8 @@ async function translateChunked(
 
 // ── Auto-detect source language and translate ─────────────────────────────────
 
-// Calls Google Translate with sl=auto&tl=langA.
-// If Google detects the source as langB (or not langA), the returned translation
-// is already langB→langA — no second call needed, no forced sl= on the wrong script.
-// If Google detects langA, we make one more call to translate to langB.
+// Primary: GPT detects language + translates in one call (accurate, single round-trip).
+// Fallback: Google Translate sl=auto (free, no key needed).
 export async function translateAutoDetect(
   text: string,
   langA: string,
@@ -147,37 +145,35 @@ export async function translateAutoDetect(
   if (!text.trim() || langABase === langBBase) {
     return { translated: text, sourceLang: langA, targetLang: langB };
   }
+
+  const langAName = getLanguageByCode(langA)?.name ?? langA;
+  const langBName = getLanguageByCode(langB)?.name ?? langB;
+
+  // 1. GPT — detects language and translates in one call
+  const gpt = await detectAndTranslate(text, langA, langB, langAName, langBName);
+  if (gpt) return gpt;
+
+  // 2. Google Translate fallback — sl=auto gives detected language for free
   try {
-    // Translate to langA with auto-detect — one call gives us detected lang + translation
     const urlA = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${langABase}&dt=t&q=${encodeURIComponent(text)}`;
-    const resA = await fetch(urlA);
-    const jsonA = await resA.json();
+    const jsonA = await (await fetch(urlA)).json();
     const detectedSource: string = (jsonA[2] ?? '').split('-')[0];
     const translatedToA = (jsonA[0] as any[][])?.map((c) => c[0] || '').join('') ?? '';
 
     if (detectedSource !== langABase) {
-      // Google detected something other than langA → Person B is speaking
-      // translatedToA is already the correct langB→langA translation
       return {
-        translated: translatedToA && translatedToA !== text ? translatedToA : text,
+        translated: translatedToA || text,
         sourceLang: langB,
         targetLang: langA,
       };
     }
 
-    // Google detected langA → Person A is speaking, translate to langB
     const urlB = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${langABase}&tl=${langBBase}&dt=t&q=${encodeURIComponent(text)}`;
-    const resB = await fetch(urlB);
-    const jsonB = await resB.json();
+    const jsonB = await (await fetch(urlB)).json();
     const translatedToB = (jsonB[0] as any[][])?.map((c) => c[0] || '').join('') ?? '';
-    return {
-      translated: translatedToB && translatedToB !== text ? translatedToB : text,
-      sourceLang: langA,
-      targetLang: langB,
-    };
+    return { translated: translatedToB || text, sourceLang: langA, targetLang: langB };
   } catch {
-    const translated = await translateText(text, langA, langB);
-    return { translated, sourceLang: langA, targetLang: langB };
+    return { translated: text, sourceLang: langA, targetLang: langB };
   }
 }
 
@@ -187,36 +183,33 @@ export async function translateText(
   text: string,
   sourceLang: string,
   targetLang: string,
-  useAI: boolean = false,
 ): Promise<string> {
   const src = sourceLang.split('-')[0];
   const tgt = targetLang.split('-')[0];
   if (!text.trim() || src === tgt) return text;
 
-  // 0. AI Translation (premium)
-  if (useAI) {
-    const ai = await translateWithAI(text, src, tgt);
-    if (ai && ai !== text) return ai;
-  }
+  // 1. GPT (gpt-5.4-mini) — primary
+  const ai = await translateWithAI(text, src, tgt);
+  if (ai && ai !== text) return ai;
 
   const srcLocale = toLocale(src);
   const tgtLocale = toLocale(tgt);
 
-  // 1. DeepL — highest quality (requires free key), handles long text natively
+  // 2. DeepL (requires free key)
   const deepl = await translateWithDeepL(text, src, tgt);
   if (deepl && deepl !== text) return deepl;
 
-  // 2. Google Translate (unofficial client, no key required, most reliable free option)
+  // 3. Google Translate (no key, most reliable free fallback)
   const google = await translateWithGoogle(text, src, tgt);
   if (google && google !== text) return google;
 
-  // 3. MyMemory with full locale pair, chunked for the 500-char free-tier limit
+  // 4. MyMemory — chunked for 500-char limit
   const myMemory = await translateChunked(text, (chunk) =>
     translateWithMyMemory(chunk, srcLocale, tgtLocale)
   );
   if (myMemory && myMemory !== text) return myMemory;
 
-  // 4. LibreTranslate fallback, also chunked
+  // 5. LibreTranslate — last resort
   const libre = await translateChunked(text, (chunk) =>
     translateWithLibre(chunk, src, tgt)
   );

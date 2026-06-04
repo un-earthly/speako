@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Switch, Share, Clipboard, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Switch, Share, Clipboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
@@ -29,10 +29,9 @@ interface Section {
 }
 
 export function AccountScreen({ navigation }: any) {
-  const { user, firebaseUser, logout, updateUserProfile, resetPassword } = useAuth();
+  const { user, logout, updateUserProfile } = useAuth();
   const { theme, resolvedTheme, colors, isDark } = useTheme();
   const { showToast } = useToast();
-  const hasPasswordProvider = firebaseUser?.providerData?.some((p) => p.providerId === 'password') ?? false;
   const referralCode = user?.referralCode || '';
   const referralCount = user?.referralCount ?? 0;
   const referralPoints = user?.referralPointsEarned ?? 0;
@@ -54,9 +53,9 @@ export function AccountScreen({ navigation }: any) {
     },
     {
       title: 'ACCOUNT SECURITY',
-      items: hasPasswordProvider
-        ? [{ label: 'Change Password', iconName: 'lock-closed-outline', screen: Routes.ChangePassword }]
-        : [{ label: 'Set Password', iconName: 'lock-closed-outline', screen: Routes.ChangePassword }],
+      items: [
+        { label: 'Security & Biometrics', iconName: 'finger-print-outline', screen: Routes.BiometricSecurity },
+      ],
     },
     {
       title: 'APPLICATION SETTING',
@@ -75,31 +74,6 @@ export function AccountScreen({ navigation }: any) {
   ];
 
   const handleItemPress = (item: MenuItem) => {
-    if (item.label === 'Set Password') {
-      Alert.alert(
-        'Set Password',
-        "You signed in with Google. We'll send a password reset link to your email so you can set a password.",
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Send Link',
-            onPress: async () => {
-              try {
-                if (user?.email) {
-                  await resetPassword(user.email);
-                  showToast('Password reset link sent to your email', 'success');
-                } else {
-                  showToast('No email found on account', 'error');
-                }
-              } catch (err: any) {
-                showToast(err.message || 'Failed to send reset link', 'error');
-              }
-            },
-          },
-        ],
-      );
-      return;
-    }
     if (item.label === 'Watch Ad for Points') {
       showRewardedAd(async () => {
         if (user) {

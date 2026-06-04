@@ -15,12 +15,10 @@ export function generateReferralCode(): string {
 export async function ensureReferralCode(uid: string): Promise<string> {
   const ref = doc(db, 'users', uid);
   const snap = await getDoc(ref);
-  const data = snap.data();
-  if (data?.referralCode) return data.referralCode;
-
-  const code = generateReferralCode();
-  await updateDoc(ref, { referralCode: code });
-  return code;
+  const existing = snap.data()?.referralCode;
+  if (existing) return existing;
+  // Doc may not exist yet (caller will include the code in their setDoc)
+  return generateReferralCode();
 }
 
 export async function processReferral(newUserUid: string, referralCode: string): Promise<void> {

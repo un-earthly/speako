@@ -10,10 +10,10 @@ import {
   Platform,
   ActivityIndicator,
   Animated,
-  PanResponder,
   Alert,
 } from 'react-native';
-import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
+import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
+import { transcribeAudio } from '../../services/whisper';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,7 +32,7 @@ import {
   type Message,
   type Conversation,
 } from '../../services/firestore';
-import { translateText, translateAutoDetect } from '../../services/translation';
+import { translateAutoDetect } from '../../services/translation';
 import { isSameDay, formatDateLabel } from '../../utils/date';
 import { getMessageCost } from '../../utils/points';
 import { POINTS, deductPoints, getUserPoints, rewardAdWatch } from '../../services/rewards';
@@ -41,58 +41,33 @@ import { useRewardedAd } from '../../hooks/useRewardedAd';
 import { AdBanner } from '../../components/common/AdBanner';
 import { Timestamp } from 'firebase/firestore';
 
-const ACTIVATION_THRESHOLD = 60;
-const MAX_DRAG = 100;
-const SNAP_BACK_DURATION = 200;
-
 type Phase = 'idle' | 'recording' | 'processing';
 
-function WordHighlight({ text, baseStyle }: { text: string; baseStyle: any }) {
-  const words = text.trim().split(/(\s+)/);
-  if (words.length < 2) {
-    return <Text style={[baseStyle, { color: '#007AFF', fontWeight: '700' }]}>{text}</Text>;
-  }
-  let lastIdx = words.length - 1;
-  while (lastIdx > 0 && !words[lastIdx].trim()) lastIdx--;
-  const stable = words.slice(0, lastIdx).join('');
-  const latest = words.slice(lastIdx).join('');
-  return (
-    <Text style={baseStyle}>
-      {stable}
-      <Text style={{ color: '#007AFF', fontWeight: '700' }}>{latest}</Text>
-    </Text>
-  );
-}
 
 export function FaceToFaceScreen({ route, navigation }: any) {
   const { conversationId, langA, langB } = route.params;
   const { user, points: authPoints } = useAuth();
   const { colors, isDark } = useTheme();
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
   const [phase, setPhase] = useState<Phase>('idle');
-  const [voicePartial, setVoicePartial] = useState('');
   const [inputMode, setInputMode] = useState<'voice' | 'keyboard'>('voice');
   const [translationPreview, setTranslationPreview] = useState('');
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [activeSpeaker, setActiveSpeaker] = useState<'langA' | 'langB' | null>(null);
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [userPoints, setUserPoints] = useState(authPoints);
   const [showPointsBanner, setShowPointsBanner] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const sessionMsgCountRef = useRef(0);
   const insets = useSafeAreaInsets();
-
-  const panX = useRef(new Animated.Value(0)).current;
-  const isDraggingRef = useRef(false);
 
   const langAInfo = getLanguageByCode(langA);
   const langBInfo = getLanguageByCode(langB);
@@ -100,15 +75,16 @@ export function FaceToFaceScreen({ route, navigation }: any) {
 
   const phaseRef = useRef<Phase>('idle');
   const recordingStartedAt = useRef(0);
-  const canRecordAfter = useRef(0);
-  const transcriptRef = useRef('');
-  const finalizedTranscriptRef = useRef('');
-  const shouldFinalizeOnEndRef = useRef(false);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
-  // Pre-warm permissions so we don't async-block during the gesture
+  const waveformBars = useRef(
+    Array(5).fill(null).map(() => new Animated.Value(0.25))
+  ).current;
+  const waveformTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Pre-warm mic permission
   useEffect(() => {
-    ExpoSpeechRecognitionModule.requestPermissionsAsync().catch(() => { });
+    AudioModule.requestRecordingPermissionsAsync().catch(() => {});
   }, []);
 
   // Subscribe to Firestore messages and conversation
@@ -139,213 +115,35 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     };
   }, []);
 
-  // Pulse animation while recording
-  useEffect(() => {
-    if (phase === 'recording') {
-      pulseLoop.current = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.15, duration: 600, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-        ]),
-      );
-      pulseLoop.current.start();
-    } else {
-      pulseLoop.current?.stop();
-      pulseAnim.setValue(1);
-    }
-    return () => {
-      pulseLoop.current?.stop();
-    };
-  }, [phase, pulseAnim]);
+  // ── Waveform helpers ───────────────────────────────────────────────────────
 
-  // Side label opacity animations based on drag position
-  const leftOpacity = panX.interpolate({
-    inputRange: [-MAX_DRAG, -ACTIVATION_THRESHOLD, 0],
-    outputRange: [1, 1, 0.4],
-    extrapolate: 'clamp',
-  });
-  const rightOpacity = panX.interpolate({
-    inputRange: [0, ACTIVATION_THRESHOLD, MAX_DRAG],
-    outputRange: [0.4, 1, 1],
-    extrapolate: 'clamp',
-  });
-
-  // ── Speech recognition events ──────────────────────────────────────────────
-
-  useSpeechRecognitionEvent('result', (e) => {
-    const text = e.results[0]?.transcript ?? '';
-    console.log('[STT result]', { isFinal: e.isFinal, resultsCount: e.results.length, text, allResults: e.results.map((r: any) => r.transcript) });
-
-    if (e.isFinal) {
-      // Append finalized segment so continuous mode doesn't lose prior sentences
-      finalizedTranscriptRef.current = (finalizedTranscriptRef.current + ' ' + text).trim();
-      transcriptRef.current = finalizedTranscriptRef.current;
-    } else {
-      // Show accumulated finals + current partial
-      transcriptRef.current = (finalizedTranscriptRef.current + ' ' + text).trim();
-    }
-
-    setVoicePartial(transcriptRef.current);
-  });
-
-  useSpeechRecognitionEvent('end', async () => {
-    if (!shouldFinalizeOnEndRef.current) return;
-    shouldFinalizeOnEndRef.current = false;
-
-    const text = transcriptRef.current.trim();
-    console.log('[STT end] finalize text:', JSON.stringify(text));
-    transcriptRef.current = '';
-    setVoicePartial('');
-
-    if (!text) {
-      resetRecordingState();
-      return;
-    }
-
-    const msgCount = conversation?.messageCount ?? messages.length;
-    const cost = getMessageCost(msgCount);
-
-    if (userPoints < cost) {
-      setShowPointsBanner(true);
-      setSending(false);
-      resetRecordingState();
-      return;
-    }
-
-    setPhase('processing');
-    setSending(true);
-
-    try {
-      // Voice mode: always trust the side the user dragged to.
-      // The STT engine is already configured for that language.
-      const sourceLang = activeSpeaker === 'langB' ? langB : langA;
-      const targetLang = activeSpeaker === 'langB' ? langA : langB;
-      console.log('[Translate] sending to translateText:', JSON.stringify(text), sourceLang, targetLang);
-      const translated = await translateText(text, sourceLang, targetLang);
-      console.log('[Translate] result:', JSON.stringify(translated), 'source:', sourceLang, 'target:', targetLang);
-
-      const ok = await deductPoints(user!.uid, cost, 'message', conversationId);
-      if (ok) setUserPoints((p) => Math.max(0, p - cost));
-
-      addOptimisticMessage(text, translated, sourceLang, targetLang, 'voice');
-      sendMessage(conversationId, user!.uid, text, translated, sourceLang, targetLang, 'voice').catch(
-        (err) => console.error('Firestore send failed:', err),
-      );
-      sessionMsgCountRef.current += 1;
-      if (sessionMsgCountRef.current % 10 === 0) {
-        showInterstitial();
-      }
-    } catch (err) {
-      console.error('Finalize failed:', err);
-    } finally {
-      setSending(false);
-      resetRecordingState();
-    }
-  });
-
-  useSpeechRecognitionEvent('volumechange', (e) => {
-    const vol = e.value;
-    const scale = vol < 0 ? 1 : 1 + Math.min(vol / 10, 1) * 0.45;
-    Animated.timing(pulseAnim, { toValue: scale, duration: 80, useNativeDriver: true }).start();
-  });
-
-  useSpeechRecognitionEvent('error', (e) => {
-    // 'aborted' is expected on quick taps — ignore it
-    if (e.error === 'aborted') return;
-
-    if (
-      e.error === 'network' ||
-      e.error === 'no-speech' ||
-      e.error === 'language-not-supported'
-    ) {
-      console.warn('STT warning:', e.error, e.message);
-    } else {
-      console.error('STT error:', e.error, e.message);
-    }
-
-    // Cooldown to avoid rapid retry loops after a failure
-    canRecordAfter.current = Date.now() + 600;
-    shouldFinalizeOnEndRef.current = false;
-    resetRecordingState();
-  });
-
-  // ── PanResponder for walkie-talkie slider ──────────────────────────────────
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 5,
-      onPanResponderGrant: () => {
-        isDraggingRef.current = true;
-        panX.stopAnimation();
-        setShowMenu(false);
-      },
-      onPanResponderMove: (_, gs) => {
-        if (!isDraggingRef.current) return;
-        const clampedDx = Math.max(-MAX_DRAG, Math.min(MAX_DRAG, gs.dx));
-        panX.setValue(clampedDx);
-
-        if (gs.dx > ACTIVATION_THRESHOLD && phaseRef.current === 'idle') {
-          startRecording(langA, 'langA');
-        } else if (gs.dx < -ACTIVATION_THRESHOLD && phaseRef.current === 'idle') {
-          startRecording(langB, 'langB');
-        }
-      },
-      onPanResponderRelease: () => {
-        isDraggingRef.current = false;
-        if (phaseRef.current === 'recording') {
-          const elapsed = Date.now() - recordingStartedAt.current;
-          if (elapsed < 400) {
-            // Too quick — abort to avoid confusing the STT engine
-            try {
-              ExpoSpeechRecognitionModule.abort();
-            } catch {
-              /* ignore */
-            }
-            canRecordAfter.current = Date.now() + 200;
-            resetRecordingState();
-          } else {
-            shouldFinalizeOnEndRef.current = true;
-            ExpoSpeechRecognitionModule.stop();
-          }
-        }
-        Animated.timing(panX, {
-          toValue: 0,
-          duration: SNAP_BACK_DURATION,
+  const startWaveform = useCallback(() => {
+    if (waveformTimer.current) clearInterval(waveformTimer.current);
+    waveformTimer.current = setInterval(() => {
+      waveformBars.forEach((bar) => {
+        Animated.timing(bar, {
+          toValue: 0.15 + Math.random() * 0.85,
+          duration: 150,
           useNativeDriver: true,
         }).start();
-      },
-      onPanResponderTerminate: () => {
-        isDraggingRef.current = false;
-        if (phaseRef.current === 'recording') {
-          try {
-            ExpoSpeechRecognitionModule.abort();
-          } catch {
-            /* ignore */
-          }
-          canRecordAfter.current = Date.now() + 200;
-          shouldFinalizeOnEndRef.current = false;
-          resetRecordingState();
-        }
-        Animated.timing(panX, {
-          toValue: 0,
-          duration: SNAP_BACK_DURATION,
-          useNativeDriver: true,
-        }).start();
-      },
-    }),
-  ).current;
+      });
+    }, 180);
+  }, [waveformBars]);
+
+  const stopWaveform = useCallback(() => {
+    if (waveformTimer.current) { clearInterval(waveformTimer.current); waveformTimer.current = null; }
+    waveformBars.forEach((bar) =>
+      Animated.timing(bar, { toValue: 0.25, duration: 120, useNativeDriver: true }).start()
+    );
+  }, [waveformBars]);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   const resetRecordingState = useCallback(() => {
-    pulseLoop.current?.stop();
-    pulseAnim.setValue(1);
+    stopWaveform();
     setPhase('idle');
     phaseRef.current = 'idle';
-    setVoicePartial('');
-    setActiveSpeaker(null);
-  }, [pulseAnim]);
+  }, [stopWaveform]);
 
   const addOptimisticMessage = (
     originalText: string,
@@ -371,26 +169,74 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
   };
 
-  const startRecording = (sttLang: string, speaker: 'langA' | 'langB') => {
+  const startRecording = async () => {
     if (phaseRef.current !== 'idle') return;
-    if (Date.now() < canRecordAfter.current) return;
+    try {
+      const { granted } = await AudioModule.requestRecordingPermissionsAsync();
+      if (!granted) { showToast('Microphone permission required', 'error'); return; }
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      setPhase('recording');
+      phaseRef.current = 'recording';
+      recordingStartedAt.current = Date.now();
+      startWaveform();
+    } catch (err) {
+      console.error('[Recorder] start failed:', err);
+      resetRecordingState();
+    }
+  };
 
-    transcriptRef.current = '';
-    finalizedTranscriptRef.current = '';
-    setVoicePartial('');
-    setActiveSpeaker(speaker);
-    setPhase('recording');
-    phaseRef.current = 'recording';
-    recordingStartedAt.current = Date.now();
+  const stopAndTranscribe = async () => {
+    const elapsed = Date.now() - recordingStartedAt.current;
+    stopWaveform();
+    setPhase('processing');
+    phaseRef.current = 'processing';
 
-    ExpoSpeechRecognitionModule.start({
-      lang: sttLang,
-      interimResults: true,
-      continuous: true,
-      volumeChangeEventOptions: { enabled: true, intervalMillis: 100 },
-      addsPunctuation: true,
-      recordingOptions: { persist: true },
-    })
+    try {
+      await recorder.stop();
+      const uri = recorder.uri;
+
+      if (!uri || elapsed < 500) {
+        resetRecordingState();
+        return;
+      }
+
+      const transcript = await transcribeAudio(uri);
+      if (!transcript) { resetRecordingState(); return; }
+
+      const msgCount = conversation?.messageCount ?? messages.length;
+      const cost = getMessageCost(msgCount);
+      if (userPoints < cost) {
+        setShowPointsBanner(true);
+        resetRecordingState();
+        return;
+      }
+
+      setSending(true);
+      const { translated, sourceLang, targetLang } = await translateAutoDetect(transcript, langA, langB);
+
+      const ok = await deductPoints(user!.uid, cost, 'message', conversationId);
+      if (ok) setUserPoints((p) => Math.max(0, p - cost));
+
+      addOptimisticMessage(transcript, translated, sourceLang, targetLang, 'voice');
+      sendMessage(conversationId, user!.uid, transcript, translated, sourceLang, targetLang, 'voice')
+        .catch((err) => console.error('Firestore send failed:', err));
+
+      sessionMsgCountRef.current += 1;
+      if (sessionMsgCountRef.current % 10 === 0) showInterstitial();
+    } catch (err: any) {
+      console.error('[Whisper] transcription failed:', err);
+      showToast(err.message || 'Transcription failed', 'error');
+    } finally {
+      setSending(false);
+      resetRecordingState();
+    }
+  };
+
+  const handleTap = () => {
+    if (phase === 'processing') return;
+    if (phase === 'idle') { startRecording(); return; }
+    stopAndTranscribe();
   };
   const handleClearConversation = () => {
     Alert.alert('Clear conversation', 'Delete all messages in this chat?', [
@@ -609,12 +455,6 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     );
   };
 
-  const micBackgroundColor =
-    activeSpeaker === 'langB'
-      ? '#34C759'
-      : activeSpeaker === 'langA'
-        ? '#007AFF'
-        : '#007AFF';
 
   return (
     <KeyboardAvoidingView
@@ -689,7 +529,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
             <View style={styles.emptyState}>
               <Ionicons name="people-outline" size={44} color={colors.textSecondary} />
               <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                Drag the mic toward your language and hold to speak.{'\n'}Release to send.
+                Tap the mic to speak in either language.{'\n'}Tap again to stop and translate.
               </Text>
             </View>
           }
@@ -743,17 +583,11 @@ export function FaceToFaceScreen({ route, navigation }: any) {
         >
           {inputMode === 'voice' ? (
             <View style={styles.voiceRow}>
-              {/* Keyboard toggle */}
               <TouchableOpacity
                 style={styles.modeToggle}
                 onPress={() => {
                   if (phaseRef.current === 'recording') {
-                    shouldFinalizeOnEndRef.current = false;
-                    try {
-                      ExpoSpeechRecognitionModule.stop();
-                    } catch {
-                      /* ignore */
-                    }
+                    recorder.stop().catch(() => {});
                     resetRecordingState();
                   }
                   setInputMode('keyboard');
@@ -762,48 +596,30 @@ export function FaceToFaceScreen({ route, navigation }: any) {
                 <Ionicons name="keypad-outline" size={22} color={colors.textSecondary} />
               </TouchableOpacity>
 
-              {/* Walkie-talkie slider */}
-              <View style={styles.sliderContainer}>
-                {/* Left label */}
-                <Animated.View style={[styles.sliderSide, { opacity: leftOpacity }]}>
-                  <FlagEmoji countryCode={langBInfo?.countryCode ?? 'BD'} size={22} />
-                  <Text style={[styles.sliderSideText, { color: colors.text }]}>
-                    {langBInfo?.nativeName || langBInfo?.name}
-                  </Text>
-                </Animated.View>
-
-                {/* Track + Draggable Mic */}
-                <View style={styles.sliderTrack}>
-                  <View style={[styles.sliderTrackLine, { backgroundColor: colors.border }]} />
-
+              <View style={styles.micCenter}>
+                <TouchableOpacity onPress={handleTap} disabled={phase === 'processing'} activeOpacity={0.8}>
                   <Animated.View
                     style={[
                       styles.micBtnLarge,
                       {
-                        transform: [{ translateX: panX }, { scale: pulseAnim }],
-                        backgroundColor: phase === 'recording' ? '#FF3B30' : micBackgroundColor,
+                        transform: [{ scale: pulseAnim }],
+                        backgroundColor: phase === 'recording' ? '#FF3B30' : '#007AFF',
+                        opacity: phase === 'processing' ? 0.6 : 1,
                       },
                     ]}
-                    {...panResponder.panHandlers}
                   >
                     {phase === 'processing' ? (
                       <ActivityIndicator size="small" color="#FFF" />
                     ) : (
-                      <Ionicons name="mic" size={28} color="#FFF" />
+                      <Ionicons name={phase === 'recording' ? 'stop' : 'mic'} size={28} color="#FFF" />
                     )}
                   </Animated.View>
-                </View>
-
-                {/* Right label */}
-                <Animated.View style={[styles.sliderSide, { opacity: rightOpacity }]}>
-                  <FlagEmoji countryCode={langAInfo?.countryCode ?? 'US'} size={22} />
-                  <Text style={[styles.sliderSideText, { color: colors.text }]}>
-                    {langAInfo?.nativeName || langAInfo?.name}
-                  </Text>
-                </Animated.View>
+                </TouchableOpacity>
+                <Text style={[styles.micLabel, { color: colors.textSecondary }]}>
+                  {phase === 'idle' ? 'Tap to speak' : phase === 'recording' ? 'Tap to stop' : 'Translating…'}
+                </Text>
               </View>
 
-              {/* Spacer to balance layout */}
               <View style={styles.modeToggle} />
             </View>
           ) : (
@@ -854,15 +670,20 @@ export function FaceToFaceScreen({ route, navigation }: any) {
             </View>
           )}
 
-          {/* Partial transcript hint */}
-          {phase === 'recording' && voicePartial ? (
-            <View style={styles.partialStrip}>
-              <WordHighlight
-                text={voicePartial}
-                baseStyle={[styles.partialText, { color: colors.text }]}
-              />
+          {/* Live waveform while recording */}
+          {phase === 'recording' && (
+            <View style={styles.waveformStrip}>
+              {waveformBars.map((bar, i) => (
+                <Animated.View
+                  key={i}
+                  style={[
+                    styles.waveBar,
+                    { transform: [{ scaleY: bar }] },
+                  ]}
+                />
+              ))}
             </View>
-          ) : null}
+          )}
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -1017,34 +838,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sliderContainer: {
+  micCenter: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
+    gap: 6,
+    paddingVertical: 8,
   },
-  sliderSide: {
-    alignItems: 'center',
-    gap: 4,
-    width: 70,
-  },
-  sliderSideText: {
-    fontSize: 11,
+  micLabel: {
+    fontSize: 12,
     fontWeight: '500',
-    textAlign: 'center',
-  },
-  sliderTrack: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 80,
-  },
-  sliderTrackLine: {
-    position: 'absolute',
-    height: 4,
-    borderRadius: 2,
-    width: '100%',
   },
   micBtnLarge: {
     width: 72,
@@ -1059,15 +861,19 @@ const styles = StyleSheet.create({
     elevation: 5,
     zIndex: 10,
   },
-  partialStrip: {
+  waveformStrip: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 6,
-    paddingBottom: 2,
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    height: 36,
   },
-  partialText: {
-    fontSize: 13,
-    textAlign: 'center',
-    maxWidth: 260,
+  waveBar: {
+    width: 4,
+    height: 24,
+    borderRadius: 2,
+    backgroundColor: '#FF3B30',
   },
   keyboardRow: {
     flexDirection: 'row',

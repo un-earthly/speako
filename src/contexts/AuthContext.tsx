@@ -2,23 +2,19 @@ import React, { createContext, useContext, useEffect, useState, type ReactNode }
 import { registerForPushNotifications } from '../services/notifications';
 import {
   onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  updateProfile,
   signOut,
-  sendPasswordResetEmail,
   signInWithCredential,
-  updatePassword,
-  EmailAuthProvider,
-  reauthenticateWithCredential,
+  signInWithCustomToken,
+  updateProfile,
   type User,
   type UserCredential,
   type OAuthCredential,
 } from 'firebase/auth';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { doc, getDoc, setDoc, updateDoc, onSnapshot, Timestamp } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { POINTS, addPoints, awardDailyLogin } from '../services/rewards';
-import { ensureReferralCode, registerReferralCode } from '../services/referral';
+import { generateReferralCode, ensureReferralCode, registerReferralCode } from '../services/referral';
 
 export interface AppUser {
   uid: string;
@@ -44,14 +40,14 @@ interface AuthContextValue {
   firebaseUser: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  justSignedIn: boolean;
   points: number;
-  login: (email: string, password: string) => Promise<UserCredential>;
+  sendOTP: (email: string) => Promise<void>;
+  verifyOTP: (email: string, otp: string, displayName?: string) => Promise<void>;
   loginWithGoogle: (credential: OAuthCredential) => Promise<UserCredential>;
-  register: (email: string, password: string, displayName: string) => Promise<UserCredential>;
   logout: () => Promise<void>;
-  resetPassword: (email: string) => Promise<void>;
-  changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
   updateUserProfile: (data: Partial<AppUser>) => Promise<void>;
+  clearJustSignedIn: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -60,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [user, setUser] = useState<AppUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [justSignedIn, setJustSignedIn] = useState(false);
 
   useEffect(() => {
     let userDocUnsub: (() => void) | null = null;
@@ -78,37 +75,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userDocUnsub = onSnapshot(
           userRef,
           async (snap) => {
-            if (snap.exists()) {
-              const data = snap.data() as AppUser;
-              if (data.isDiscoverable === undefined) {
-                await updateDoc(userRef, { isDiscoverable: true });
-                data.isDiscoverable = true;
+            try {
+              if (snap.exists()) {
+                const data = snap.data() as AppUser;
+                if (!data.uid) return;
+                if (data.isDiscoverable === undefined) {
+                  await updateDoc(userRef, { isDiscoverable: true });
+                  data.isDiscoverable = true;
+                }
+                setUser(data);
+              } else {
+                const referralCode = await ensureReferralCode(fbUser.uid);
+                await registerReferralCode(fbUser.uid, referralCode).catch((e) =>
+                  console.warn('[Auth] registerReferralCode failed:', e?.code),
+                );
+
+                const newUser: AppUser = {
+                  uid: fbUser.uid,
+                  email: fbUser.email,
+                  displayName: fbUser.displayName,
+                  photoURL: fbUser.photoURL,
+                  preferredLanguage: 'en',
+                  phone: null,
+                  isDiscoverable: true,
+                  points: 0,
+                  referralCode,
+                };
+                await setDoc(userRef, newUser);
+                await addPoints(fbUser.uid, POINTS.WELCOME_BONUS, 'welcome');
+                newUser.points = POINTS.WELCOME_BONUS;
+                setUser(newUser);
+                console.log('[Auth] Created new user doc with welcome bonus');
               }
-              setUser(data);
-            } else {
-              const referralCode = await ensureReferralCode(fbUser.uid);
-              await registerReferralCode(fbUser.uid, referralCode);
-
-              const newUser: AppUser = {
-                uid: fbUser.uid,
-                email: fbUser.email,
-                displayName: fbUser.displayName,
-                photoURL: fbUser.photoURL,
-                preferredLanguage: 'en',
-                phone: null,
-                isDiscoverable: true,
-                points: 0,
-                referralCode,
-              };
-              await setDoc(userRef, newUser);
-
-              await addPoints(fbUser.uid, POINTS.WELCOME_BONUS, 'welcome');
-              newUser.points = POINTS.WELCOME_BONUS;
-
-              setUser(newUser);
-              console.log('[Auth] Created new user doc with welcome bonus');
+            } catch (e) {
+              console.error('[Auth] onSnapshot handler error:', e);
+            } finally {
+              setIsLoading(false);
             }
-            setIsLoading(false);
           },
           (err) => {
             console.error('[Auth] Firestore onSnapshot failed:', err.message);
@@ -131,7 +134,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setUser(null);
         setIsLoading(false);
-        console.log('[Auth] isLoading set to false. user: null');
       }
     });
 
@@ -141,54 +143,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = async (email: string, password: string) => {
-    return signInWithEmailAndPassword(auth, email, password);
+  const sendOTP = async (email: string): Promise<void> => {
+    const fn = httpsCallable(getFunctions(), 'sendOTP');
+    await fn({ email });
   };
 
-  const loginWithGoogle = async (credential: OAuthCredential) => {
+  const verifyOTP = async (email: string, otp: string, displayName?: string): Promise<void> => {
+    const fn = httpsCallable(getFunctions(), 'verifyOTP');
+    const result = await fn({ email, otp, displayName }) as any;
+    setJustSignedIn(true);
+    await signInWithCustomToken(auth, result.data.token);
+    if (displayName && auth.currentUser && !auth.currentUser.displayName) {
+      await updateProfile(auth.currentUser, { displayName });
+    }
+  };
+
+  const loginWithGoogle = async (credential: OAuthCredential): Promise<UserCredential> => {
+    setJustSignedIn(true);
     return signInWithCredential(auth, credential);
-  };
-
-  const register = async (email: string, password: string, displayName: string) => {
-    const cred = await createUserWithEmailAndPassword(auth, email, password);
-    await updateProfile(cred.user, { displayName });
-
-    const referralCode = await ensureReferralCode(cred.user.uid);
-    await registerReferralCode(cred.user.uid, referralCode);
-
-    const newUser: AppUser = {
-      uid: cred.user.uid,
-      email: cred.user.email,
-      displayName,
-      photoURL: null,
-      preferredLanguage: 'en',
-      phone: null,
-      isDiscoverable: true,
-      referralCode,
-    };
-    await setDoc(doc(db, 'users', cred.user.uid), newUser);
-
-    await addPoints(cred.user.uid, POINTS.WELCOME_BONUS, 'welcome');
-    newUser.points = POINTS.WELCOME_BONUS;
-
-    setUser(newUser);
-    return cred;
   };
 
   const logout = async () => {
     await signOut(auth);
     setUser(null);
-  };
-
-  const resetPassword = async (email: string) => {
-    await sendPasswordResetEmail(auth, email);
-  };
-
-  const changePassword = async (oldPassword: string, newPassword: string) => {
-    if (!firebaseUser || !firebaseUser.email) throw new Error('No authenticated user');
-    const credential = EmailAuthProvider.credential(firebaseUser.email, oldPassword);
-    await reauthenticateWithCredential(firebaseUser, credential);
-    await updatePassword(firebaseUser, newPassword);
+    setJustSignedIn(false);
   };
 
   const updateUserProfile = async (data: Partial<AppUser>) => {
@@ -201,6 +179,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const clearJustSignedIn = () => setJustSignedIn(false);
+
   return (
     <AuthContext.Provider
       value={{
@@ -208,14 +188,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         firebaseUser,
         isLoading,
         isAuthenticated: !!user,
+        justSignedIn,
         points: user?.points ?? 0,
-        login,
+        sendOTP,
+        verifyOTP,
         loginWithGoogle,
-        register,
         logout,
-        resetPassword,
-        changePassword,
         updateUserProfile,
+        clearJustSignedIn,
       }}
     >
       {children}

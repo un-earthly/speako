@@ -33,7 +33,7 @@ export function AppNavigator() {
       <Stack.Screen name={Routes.Conversation} component={ConversationScreen} />
       <Stack.Screen name={Routes.FaceToFace} component={FaceToFaceScreen} />
       <Stack.Screen name={Routes.PersonalInfo} component={EditProfileScreen} />
-      <Stack.Screen name={Routes.ChangePassword} component={ChangePasswordScreen} />
+      <Stack.Screen name={Routes.BiometricSecurity} component={ChangePasswordScreen} />
       <Stack.Screen name={Routes.ChangeLanguage} component={ChangeLanguageScreen} />
       <Stack.Screen name={Routes.ChangeTheme} component={ChangeThemeScreen} />
     </Stack.Navigator>

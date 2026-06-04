@@ -41,7 +41,8 @@ export async function addPoints(
 
   const result = await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(userRef);
-    const current = snap.exists() ? (snap.data().points ?? 0) : 0;
+    if (!snap.exists()) return 0; // doc not ready yet — caller must ensure doc exists first
+    const current = snap.data().points ?? 0;
     const newTotal = current + amount;
 
     transaction.update(userRef, { points: increment(amount) });
@@ -150,6 +151,7 @@ export async function unlockAIConversation(uid: string): Promise<void> {
 export async function awardDailyLogin(uid: string): Promise<{ awarded: boolean; points: number }> {
   const ref = doc(db, 'users', uid);
   const snap = await getDoc(ref);
+  if (!snap.exists()) return { awarded: false, points: 0 };
   const data = snap.data();
   const lastLogin = data?.lastLoginDate;
   const today = new Date().toISOString().split('T')[0];

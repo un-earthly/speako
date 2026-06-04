@@ -3,9 +3,7 @@ export const Routes = {
   Splash: 'Splash',
   Login: 'Login',
   SignUp: 'SignUp',
-  ForgotPassword: 'ForgotPassword',
   OTP: 'OTP',
-  ResetPassword: 'ResetPassword',
 
   // Main
   Home: 'Home',
@@ -18,7 +16,7 @@ export const Routes = {
   FindPerson: 'FindPerson',
   PersonalInfo: 'PersonalInfo',
   History: 'History',
-  ChangePassword: 'ChangePassword',
+  BiometricSecurity: 'BiometricSecurity',
   ChangeLanguage: 'ChangeLanguage',
   ChangeTheme: 'ChangeTheme',
   FaceToFace: 'FaceToFace',

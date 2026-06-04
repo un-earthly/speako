@@ -320,6 +320,7 @@ export function subscribeToConversations(
   userId: string,
   callback: (conversations: Conversation[]) => void
 ) {
+  if (!userId) return () => {};
   const q = query(
     collection(db, 'conversations'),
     where('participants', 'array-contains', userId),
