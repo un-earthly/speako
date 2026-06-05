@@ -14,19 +14,29 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Button } from '../../components/common/Button';
+import { Input } from '../../components/common/Input';
 import { LoadingOverlay } from '../../components/common/LoadingOverlay';
 
 const OTP_LENGTH = 6;
 
 export function OTPScreen({ route, navigation }: any) {
-  const { email, displayName } = route.params ?? {};
+  const { email, displayName, password, mode } = route.params ?? {};
+  // mode: 'register' | 'forgotPassword' | undefined (default OTP sign-in)
+
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(''));
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(60);
+
+  // Shown after OTP is verified in forgotPassword mode
+  const [passwordStep, setPasswordStep] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const resetTokenRef = useRef<string | null>(null);
+
   const inputs = useRef<Array<TextInput | null>>([]);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const { verifyOTP, sendOTP } = useAuth();
+  const { verifyOTP, verifyOTPToken, signInAndSetPassword, sendOTP, completeRegistration } = useAuth();
   const { colors } = useTheme();
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
@@ -73,11 +83,46 @@ export function OTPScreen({ route, navigation }: any) {
     }
     setLoading(true);
     try {
+      if (mode === 'forgotPassword') {
+        // Get token without signing in — prevents premature navigation to Home
+        const token = await verifyOTPToken(email, otp);
+        resetTokenRef.current = token;
+        setPasswordStep(true);
+        return;
+      }
+
       await verifyOTP(email, otp, displayName);
+      if (mode === 'register' && password) {
+        await completeRegistration(email, password);
+      }
     } catch (err: any) {
       showToast(err.message || 'Invalid code. Please try again.', 'error');
       setDigits(Array(OTP_LENGTH).fill(''));
       setTimeout(() => inputs.current[0]?.focus(), 100);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetNewPassword = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      showToast('Password must be at least 6 characters', 'error');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      showToast('Passwords do not match', 'error');
+      return;
+    }
+    if (!resetTokenRef.current) {
+      showToast('Session expired. Please start over.', 'error');
+      return;
+    }
+    setLoading(true);
+    try {
+      // Sign in + set password in one step — navigation to Home happens here intentionally
+      await signInAndSetPassword(resetTokenRef.current, email, newPassword);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update password. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
@@ -99,6 +144,56 @@ export function OTPScreen({ route, navigation }: any) {
     }
   };
 
+  const title = mode === 'forgotPassword' ? 'Reset Password' : 'Check your email';
+  const subtitle = mode === 'forgotPassword'
+    ? `Enter the code we sent to verify your identity`
+    : `We sent a 6-digit code to`;
+
+  if (passwordStep) {
+    return (
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1, paddingTop: insets.top }}
+      >
+        <ScrollView
+          contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.header}>
+            <Text style={[styles.title, { color: colors.text }]}>Set New Password</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+              Choose a new password for your account
+            </Text>
+          </View>
+
+          <Input
+            label="New Password"
+            placeholder="Enter new password (min. 6 characters)"
+            value={newPassword}
+            onChangeText={setNewPassword}
+            secureTextEntry
+          />
+          <Input
+            label="Confirm Password"
+            placeholder="Re-enter new password"
+            value={confirmNewPassword}
+            onChangeText={setConfirmNewPassword}
+            secureTextEntry
+          />
+
+          <Button
+            title="Update Password"
+            onPress={handleSetNewPassword}
+            disabled={loading}
+            loading={false}
+          />
+
+          <LoadingOverlay visible={loading} message="Updating password..." />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -113,10 +208,15 @@ export function OTPScreen({ route, navigation }: any) {
         </TouchableOpacity>
 
         <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Check your email</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            We sent a 6-digit code to{'\n'}
-            <Text style={{ color: colors.text, fontWeight: '600' }}>{email}</Text>
+            {subtitle}
+            {mode !== 'forgotPassword' && (
+              <>
+                {'\n'}
+                <Text style={{ color: colors.text, fontWeight: '600' }}>{email}</Text>
+              </>
+            )}
           </Text>
         </View>
 

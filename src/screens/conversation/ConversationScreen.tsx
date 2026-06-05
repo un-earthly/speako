@@ -72,6 +72,7 @@ export function ConversationScreen({ route, navigation }: any) {
   const [spellMatches, setSpellMatches] = useState<SpellMatch[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [voicePartial, setVoicePartial] = useState('');
+  const autoRecordRef = useRef(true);
   const [langMismatch, setLangMismatch] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -125,6 +126,20 @@ export function ConversationScreen({ route, navigation }: any) {
 
   useEffect(() => { myLanguageRef.current = myLanguage; }, [myLanguage]);
 
+  useEffect(() => {
+    if (conversation?.status !== 'active') return;
+    autoRecordRef.current = true;
+    const timer = setTimeout(() => {
+      if (autoRecordRef.current) startRecording();
+    }, 600);
+    return () => {
+      clearTimeout(timer);
+      autoRecordRef.current = false;
+      try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation?.status]);
+
   useSpeechRecognitionEvent('result', (e) => {
     const text = e.results[0]?.transcript ?? '';
     if (e.isFinal) {
@@ -140,6 +155,12 @@ export function ConversationScreen({ route, navigation }: any) {
       }
       setIsRecording(false);
       setVoicePartial('');
+      // Auto-restart for continuous recording
+      if (autoRecordRef.current) {
+        setTimeout(() => {
+          if (autoRecordRef.current) startRecording();
+        }, 400);
+      }
     } else {
       setVoicePartial(text);
     }
@@ -178,12 +199,27 @@ export function ConversationScreen({ route, navigation }: any) {
     }
   };
 
-  const stopRecording = async () => {
+  const pauseRecording = () => {
     pulseLoop.current?.stop();
     pulseAnim.setValue(1);
     setIsRecording(false);
     setVoicePartial('');
     try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
+    // Keep autoRecordRef.current — tapping mic again resumes
+  };
+
+  const stopRecording = async () => {
+    autoRecordRef.current = false;
+    pulseLoop.current?.stop();
+    pulseAnim.setValue(1);
+    setIsRecording(false);
+    setVoicePartial('');
+    try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
+  };
+
+  const resumeContinuousRecording = () => {
+    autoRecordRef.current = true;
+    startRecording();
   };
 
   const canTranslate = userPoints >= getMessageCost(conversation?.messageCount ?? 0);
@@ -436,7 +472,7 @@ export function ConversationScreen({ route, navigation }: any) {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={{ flex: 1 }}
     >
       <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -451,13 +487,20 @@ export function ConversationScreen({ route, navigation }: any) {
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <View style={styles.langIndicators}>
-            <View style={[styles.langChip, { backgroundColor: colors.surface }]}>
-              <FlagEmoji countryCode={myLang?.countryCode ?? 'US'} size={14} />
-              <Text style={[styles.langChipText, { color: colors.text }]}>{myLang?.name}</Text>
+            <View style={[
+              styles.langChipSelected,
+              { backgroundColor: isDark ? 'rgba(0,122,255,0.18)' : 'rgba(0,122,255,0.10)', borderColor: isDark ? 'rgba(0,122,255,0.40)' : 'rgba(0,122,255,0.25)' }
+            ]}>
+              <FlagEmoji countryCode={myLang?.countryCode ?? 'US'} size={13} />
+              <Text style={[styles.langChipSelectedText, { color: isDark ? '#5AC8FA' : '#007AFF' }]}>{myLang?.name}</Text>
             </View>
-            <View style={[styles.langChip, { backgroundColor: colors.surface }]}>
-              <FlagEmoji countryCode={otherLang?.countryCode ?? 'US'} size={14} />
-              <Text style={[styles.langChipText, { color: colors.text }]}>{otherLang?.name}</Text>
+            <Text style={[styles.langSep, { color: colors.textSecondary }]}>↔</Text>
+            <View style={[
+              styles.langChipSelected,
+              { backgroundColor: isDark ? 'rgba(52,199,89,0.18)' : 'rgba(52,199,89,0.10)', borderColor: isDark ? 'rgba(52,199,89,0.40)' : 'rgba(52,199,89,0.25)' }
+            ]}>
+              <FlagEmoji countryCode={otherLang?.countryCode ?? 'US'} size={13} />
+              <Text style={[styles.langChipSelectedText, { color: isDark ? '#32D74B' : '#34C759' }]}>{otherLang?.name}</Text>
             </View>
           </View>
           <TouchableOpacity
@@ -579,7 +622,7 @@ export function ConversationScreen({ route, navigation }: any) {
           {isRecording ? (
             <TouchableOpacity
               style={[styles.inputWrapper, styles.recordingArea, { backgroundColor: colors.inputBackground }]}
-              onPress={stopRecording}
+              onPress={pauseRecording}
               activeOpacity={0.85}
             >
               <Animated.View style={[styles.recordingDot, { transform: [{ scale: pulseAnim }] }]} />
@@ -613,14 +656,18 @@ export function ConversationScreen({ route, navigation }: any) {
                 {sending ? (
                   <ActivityIndicator size="small" color={colors.textSecondary} />
                 ) : (
-                  <Ionicons name="send" size={16} color="#FFF" />
+                  <Ionicons name="send" size={15} color="#FFF" />
                 )}
               </View>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity onPress={isRecording ? stopRecording : startRecording}>
+            <TouchableOpacity onPress={isRecording ? pauseRecording : resumeContinuousRecording}>
               <View style={[styles.actionBtn2, { backgroundColor: isRecording ? '#FF3B30' : colors.surface }]}>
-                <Ionicons name={isRecording ? 'stop' : 'mic'} size={20} color={isRecording ? '#FFF' : colors.textSecondary} />
+                <Ionicons
+                  name={isRecording ? 'pause' : 'mic'}
+                  size={18}
+                  color={isRecording ? '#FFF' : colors.textSecondary}
+                />
               </View>
             </TouchableOpacity>
           )}
@@ -658,17 +705,19 @@ const styles = StyleSheet.create({
   langIndicators: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
-  langChip: {
+  langChipSelected: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
   },
-  langChipText: { fontSize: 13, fontWeight: '500' },
+  langChipSelectedText: { fontSize: 12, fontWeight: '600' },
+  langSep: { fontSize: 11, opacity: 0.5 },
   profileBtn: {
     width: 34,
     height: 34,
@@ -810,9 +859,9 @@ const styles = StyleSheet.create({
   },
   input: { fontSize: 16, lineHeight: 20 },
   actionBtn2: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },

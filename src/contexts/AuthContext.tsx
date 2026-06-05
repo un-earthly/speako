@@ -5,7 +5,11 @@ import {
   signOut,
   signInWithCredential,
   signInWithCustomToken,
+  signInWithEmailAndPassword,
   updateProfile,
+  updatePassword,
+  linkWithCredential,
+  EmailAuthProvider,
   type User,
   type UserCredential,
   type OAuthCredential,
@@ -44,6 +48,11 @@ interface AuthContextValue {
   points: number;
   sendOTP: (email: string) => Promise<void>;
   verifyOTP: (email: string, otp: string, displayName?: string) => Promise<void>;
+  verifyOTPToken: (email: string, otp: string) => Promise<string>;
+  signInAndSetPassword: (token: string, email: string, password: string) => Promise<void>;
+  loginWithPassword: (email: string, password: string) => Promise<void>;
+  completeRegistration: (email: string, password: string) => Promise<void>;
+  setNewPassword: (email: string, password: string) => Promise<void>;
   loginWithGoogle: (credential: OAuthCredential) => Promise<UserCredential>;
   logout: () => Promise<void>;
   updateUserProfile: (data: Partial<AppUser>) => Promise<void>;
@@ -158,6 +167,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Validates OTP and returns the custom token WITHOUT signing in.
+  // Used for forgot-password flow so the app doesn't navigate to Home prematurely.
+  const verifyOTPToken = async (email: string, otp: string): Promise<string> => {
+    const fn = httpsCallable(getFunctions(), 'verifyOTP');
+    const result = await fn({ email, otp }) as any;
+    return result.data.token as string;
+  };
+
+  // Signs in with a token obtained from verifyOTPToken, then sets the password.
+  const signInAndSetPassword = async (token: string, email: string, password: string): Promise<void> => {
+    setJustSignedIn(true);
+    await signInWithCustomToken(auth, token);
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error('Sign-in failed');
+    try {
+      const credential = EmailAuthProvider.credential(email, password);
+      await linkWithCredential(currentUser, credential);
+    } catch (e: any) {
+      if (e.code === 'auth/provider-already-linked' || e.code === 'auth/email-already-in-use') {
+        await updatePassword(currentUser, password);
+      } else {
+        throw e;
+      }
+    }
+  };
+
+  const loginWithPassword = async (email: string, password: string): Promise<void> => {
+    setJustSignedIn(true);
+    await signInWithEmailAndPassword(auth, email, password);
+  };
+
+  const completeRegistration = async (email: string, password: string): Promise<void> => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error('Not authenticated');
+    const credential = EmailAuthProvider.credential(email, password);
+    await linkWithCredential(currentUser, credential);
+  };
+
+  const setNewPassword = async (email: string, password: string): Promise<void> => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error('Not authenticated');
+    try {
+      const credential = EmailAuthProvider.credential(email, password);
+      await linkWithCredential(currentUser, credential);
+    } catch (e: any) {
+      if (e.code === 'auth/provider-already-linked' || e.code === 'auth/email-already-in-use') {
+        await updatePassword(currentUser, password);
+      } else {
+        throw e;
+      }
+    }
+  };
+
   const loginWithGoogle = async (credential: OAuthCredential): Promise<UserCredential> => {
     setJustSignedIn(true);
     return signInWithCredential(auth, credential);
@@ -192,6 +254,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         points: user?.points ?? 0,
         sendOTP,
         verifyOTP,
+        verifyOTPToken,
+        signInAndSetPassword,
+        loginWithPassword,
+        completeRegistration,
+        setNewPassword,
         loginWithGoogle,
         logout,
         updateUserProfile,

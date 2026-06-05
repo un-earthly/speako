@@ -16,6 +16,8 @@ import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 export function SignUpScreen({ navigation }: any) {
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -28,6 +30,8 @@ export function SignUpScreen({ navigation }: any) {
   const handleSignUp = async () => {
     if (!displayName.trim()) { showToast('Please enter your name', 'error'); return; }
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) { showToast('Please enter a valid email', 'error'); return; }
+    if (!password || password.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
+    if (password !== confirmPassword) { showToast('Passwords do not match', 'error'); return; }
     if (!agreed) { showToast('Please agree to the Terms & Conditions', 'error'); return; }
 
     setLoading(true);
@@ -36,6 +40,8 @@ export function SignUpScreen({ navigation }: any) {
       navigation.navigate(Routes.OTP, {
         email: email.trim().toLowerCase(),
         displayName: displayName.trim(),
+        password,
+        mode: 'register',
       });
     } catch (err: any) {
       const code = err?.code ?? '';
@@ -84,6 +90,20 @@ export function SignUpScreen({ navigation }: any) {
             onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
+          />
+          <Input
+            label="Password"
+            placeholder="Create a password (min. 6 characters)"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+          <Input
+            label="Confirm Password"
+            placeholder="Re-enter your password"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
           />
 
           <TouchableOpacity style={styles.termsRow} onPress={() => setAgreed(!agreed)}>

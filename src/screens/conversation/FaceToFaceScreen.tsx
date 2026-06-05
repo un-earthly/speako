@@ -12,8 +12,7 @@ import {
   Animated,
   Alert,
 } from 'react-native';
-import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
-import { transcribeAudio } from '../../services/whisper';
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,7 +26,6 @@ import {
   sendMessage,
   subscribeToMessages,
   subscribeToConversation,
-  deleteMessage,
   deleteAllMessagesInConversation,
   type Message,
   type Conversation,
@@ -43,18 +41,17 @@ import { Timestamp } from 'firebase/firestore';
 
 type Phase = 'idle' | 'recording' | 'processing';
 
-
 export function FaceToFaceScreen({ route, navigation }: any) {
   const { conversationId, langA, langB } = route.params;
   const { user, points: authPoints } = useAuth();
   const { colors, isDark } = useTheme();
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
   const [phase, setPhase] = useState<Phase>('idle');
+  const [voicePartial, setVoicePartial] = useState('');
   const [inputMode, setInputMode] = useState<'voice' | 'keyboard'>('voice');
   const [translationPreview, setTranslationPreview] = useState('');
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -67,30 +64,34 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   const [pausedId, setPausedId] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
   const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const sessionMsgCountRef = useRef(0);
   const insets = useSafeAreaInsets();
 
   const langAInfo = getLanguageByCode(langA);
   const langBInfo = getLanguageByCode(langB);
-  const langABase = langA.split('-')[0].split('_')[0];
 
   const phaseRef = useRef<Phase>('idle');
-  const recordingStartedAt = useRef(0);
+  const autoRecordRef = useRef(true);
+  // Alternates locale between langA and langB on each restart so both speakers get good recognition
+  const useLocaleARef = useRef(true);
+
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
   const waveformBars = useRef(
     Array(5).fill(null).map(() => new Animated.Value(0.25))
   ).current;
-  const waveformTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Pre-warm mic permission
-  useEffect(() => {
-    AudioModule.requestRecordingPermissionsAsync().catch(() => {});
-  }, []);
+  // ── Waveform (driven by volumechange) ─────────────────────────────────────
 
-  // Subscribe to Firestore messages and conversation
+  const stopWaveform = useCallback(() => {
+    waveformBars.forEach((bar) =>
+      Animated.timing(bar, { toValue: 0.25, duration: 120, useNativeDriver: true }).start()
+    );
+  }, [waveformBars]);
+
+  // ── Firestore subscriptions ────────────────────────────────────────────────
+
   useEffect(() => {
     const unsubMsgs = subscribeToMessages(conversationId, (msgs) => {
       setMessages(msgs);
@@ -99,54 +100,169 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     const unsubConvo = subscribeToConversation(conversationId, (convo) => {
       setConversation(convo);
     });
-    return () => {
-      unsubMsgs();
-      unsubConvo();
-    };
+    return () => { unsubMsgs(); unsubConvo(); };
   }, [conversationId]);
 
-  // Sync points from auth
-  useEffect(() => {
-    setUserPoints(authPoints);
-  }, [authPoints]);
-
-  // (Optimistic deduplication moved into allMessages useMemo to avoid render flicker)
+  useEffect(() => { setUserPoints(authPoints); }, [authPoints]);
 
   useEffect(() => {
-    return () => {
-      if (previewTimer.current) clearTimeout(previewTimer.current);
-    };
+    return () => { if (previewTimer.current) clearTimeout(previewTimer.current); };
   }, []);
 
-  // ── Waveform helpers ───────────────────────────────────────────────────────
+  // ── Auto-start on mount ────────────────────────────────────────────────────
 
-  const startWaveform = useCallback(() => {
-    if (waveformTimer.current) clearInterval(waveformTimer.current);
-    waveformTimer.current = setInterval(() => {
-      waveformBars.forEach((bar) => {
-        Animated.timing(bar, {
-          toValue: 0.15 + Math.random() * 0.85,
-          duration: 150,
-          useNativeDriver: true,
-        }).start();
-      });
-    }, 180);
-  }, [waveformBars]);
+  useEffect(() => {
+    autoRecordRef.current = true;
+    const timer = setTimeout(() => {
+      if (autoRecordRef.current) startRecording();
+    }, 600);
+    return () => {
+      clearTimeout(timer);
+      autoRecordRef.current = false;
+      try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const stopWaveform = useCallback(() => {
-    if (waveformTimer.current) { clearInterval(waveformTimer.current); waveformTimer.current = null; }
-    waveformBars.forEach((bar) =>
-      Animated.timing(bar, { toValue: 0.25, duration: 120, useNativeDriver: true }).start()
-    );
-  }, [waveformBars]);
+  // ── Speech recognition events ──────────────────────────────────────────────
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
+  useSpeechRecognitionEvent('result', (e) => {
+    const text = e.results[0]?.transcript ?? '';
+    if (e.isFinal) {
+      setVoicePartial('');
+      stopWaveform();
+      setPhase('processing');
+      phaseRef.current = 'processing';
+      if (text) {
+        handleTranslateAndSend(text);
+      } else {
+        // Empty result — restart immediately
+        setPhase('idle');
+        phaseRef.current = 'idle';
+        if (autoRecordRef.current) {
+          setTimeout(() => { if (autoRecordRef.current) startRecording(); }, 300);
+        }
+      }
+    } else {
+      setVoicePartial(text);
+    }
+  });
 
-  const resetRecordingState = useCallback(() => {
+  useSpeechRecognitionEvent('volumechange', (e) => {
+    const vol = e.value;
+    const normalized = vol < 0 ? 0.15 : Math.min(0.15 + (vol / 10) * 0.85, 1.0);
+    waveformBars.forEach((bar) => {
+      const v = Math.max(0.1, normalized + (Math.random() * 0.2 - 0.1));
+      Animated.timing(bar, { toValue: v, duration: 80, useNativeDriver: true }).start();
+    });
+  });
+
+  useSpeechRecognitionEvent('error', () => {
     stopWaveform();
+    setVoicePartial('');
     setPhase('idle');
     phaseRef.current = 'idle';
-  }, [stopWaveform]);
+    // Retry after error if in auto mode
+    if (autoRecordRef.current) {
+      setTimeout(() => { if (autoRecordRef.current) startRecording(); }, 800);
+    }
+  });
+
+  // ── Recording ──────────────────────────────────────────────────────────────
+
+  const startRecording = async () => {
+    if (phaseRef.current !== 'idle') return;
+    try {
+      const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!granted) { showToast('Microphone permission required', 'error'); return; }
+
+      // Alternate locale between langA and langB so both speakers are heard accurately
+      const currentLangInfo = useLocaleARef.current ? langAInfo : langBInfo;
+      const locale = currentLangInfo
+        ? `${currentLangInfo.code}-${currentLangInfo.countryCode}`
+        : 'en-US';
+
+      ExpoSpeechRecognitionModule.start({
+        lang: locale,
+        interimResults: true,
+        volumeChangeEventOptions: { enabled: true, intervalMillis: 100 },
+      });
+      setPhase('recording');
+      phaseRef.current = 'recording';
+    } catch (err) {
+      console.error('[SpeechRec] start failed:', err);
+      setPhase('idle');
+      phaseRef.current = 'idle';
+    }
+  };
+
+  const handleTap = () => {
+    if (phase === 'processing') return;
+    if (phase === 'idle') {
+      autoRecordRef.current = true;
+      startRecording();
+      return;
+    }
+    // Pause: stop listening and don't auto-restart
+    autoRecordRef.current = false;
+    stopWaveform();
+    setVoicePartial('');
+    setPhase('idle');
+    phaseRef.current = 'idle';
+    try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
+  };
+
+  // ── Translate & send ───────────────────────────────────────────────────────
+
+  const { showAd: showRewardedAd } = useRewardedAd();
+  const { showAd: showInterstitial } = useInterstitialAd();
+  const { showToast } = useToast();
+
+  const handleTranslateAndSend = async (transcript: string) => {
+    const msgCount = conversation?.messageCount ?? messages.length;
+    const cost = getMessageCost(msgCount);
+    if (userPoints < cost) {
+      setShowPointsBanner(true);
+      setPhase('idle');
+      phaseRef.current = 'idle';
+      return;
+    }
+
+    setSending(true);
+    try {
+      const { translated, sourceLang, targetLang } = await translateAutoDetect(transcript, langA, langB);
+      const ok = await deductPoints(user!.uid, cost, 'message', conversationId);
+      if (ok) setUserPoints((p) => Math.max(0, p - cost));
+
+      addOptimisticMessage(transcript, translated, sourceLang, targetLang, 'voice');
+      sendMessage(conversationId, user!.uid, transcript, translated, sourceLang, targetLang, 'voice')
+        .catch((err) => console.error('Firestore send failed:', err));
+
+      sessionMsgCountRef.current += 1;
+      if (sessionMsgCountRef.current % 10 === 0) showInterstitial();
+    } catch (err: any) {
+      console.error('[FaceToFace] translate failed:', err);
+      showToast(err.message || 'Translation failed', 'error');
+    } finally {
+      setSending(false);
+      setPhase('idle');
+      phaseRef.current = 'idle';
+      // Alternate locale for next speaker
+      useLocaleARef.current = !useLocaleARef.current;
+      if (autoRecordRef.current) {
+        setTimeout(() => { if (autoRecordRef.current) startRecording(); }, 400);
+      }
+    }
+  };
+
+  const handleWatchAdForPoints = async () => {
+    if (!user) return;
+    showRewardedAd(async () => {
+      const result = await rewardAdWatch(user.uid);
+      setUserPoints(result.newTotal);
+      setShowPointsBanner(false);
+    });
+  };
 
   const addOptimisticMessage = (
     originalText: string,
@@ -167,80 +283,52 @@ export function FaceToFaceScreen({ route, navigation }: any) {
       type,
       createdAt: Timestamp.now(),
     };
-    console.log('[Optimistic] adding message:', JSON.stringify(originalText), '→', JSON.stringify(translatedText));
     setOptimisticMessages((prev) => [...prev, optimistic]);
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
   };
 
-  const startRecording = async () => {
-    if (phaseRef.current !== 'idle') return;
-    try {
-      const { granted } = await AudioModule.requestRecordingPermissionsAsync();
-      if (!granted) { showToast('Microphone permission required', 'error'); return; }
-      await recorder.prepareToRecordAsync();
-      recorder.record();
-      setPhase('recording');
-      phaseRef.current = 'recording';
-      recordingStartedAt.current = Date.now();
-      startWaveform();
-    } catch (err) {
-      console.error('[Recorder] start failed:', err);
-      resetRecordingState();
-    }
+  // ── Keyboard mode ──────────────────────────────────────────────────────────
+
+  const handleTextChange = (text: string) => {
+    setInputText(text);
+    clearTimeout(previewTimer.current);
+    if (!text.trim()) { setTranslationPreview(''); setIsPreviewLoading(false); return; }
+    setIsPreviewLoading(true);
+    previewTimer.current = setTimeout(async () => {
+      const { translated } = await translateAutoDetect(text, langA, langB);
+      setTranslationPreview(translated !== text ? translated : '');
+      setIsPreviewLoading(false);
+    }, 900);
   };
 
-  const stopAndTranscribe = async () => {
-    const elapsed = Date.now() - recordingStartedAt.current;
-    stopWaveform();
-    setPhase('processing');
-    phaseRef.current = 'processing';
+  const handleSend = async () => {
+    const text = inputText.trim();
+    if (!text || !user || sending) return;
+    const msgCount = conversation?.messageCount ?? messages.length;
+    const cost = getMessageCost(msgCount);
+    if (userPoints < cost) { setShowPointsBanner(true); return; }
 
+    setInputText('');
+    setTranslationPreview('');
+    setIsPreviewLoading(false);
+    clearTimeout(previewTimer.current);
+    setSending(true);
     try {
-      await recorder.stop();
-      const uri = recorder.uri;
-
-      if (!uri || elapsed < 500) {
-        resetRecordingState();
-        return;
-      }
-
-      const transcript = await transcribeAudio(uri);
-      if (!transcript) { resetRecordingState(); return; }
-
-      const msgCount = conversation?.messageCount ?? messages.length;
-      const cost = getMessageCost(msgCount);
-      if (userPoints < cost) {
-        setShowPointsBanner(true);
-        resetRecordingState();
-        return;
-      }
-
-      setSending(true);
-      const { translated, sourceLang, targetLang } = await translateAutoDetect(transcript, langA, langB);
-
-      const ok = await deductPoints(user!.uid, cost, 'message', conversationId);
+      const { translated, sourceLang, targetLang } = await translateAutoDetect(text, langA, langB);
+      const ok = await deductPoints(user.uid, cost, 'message', conversationId);
       if (ok) setUserPoints((p) => Math.max(0, p - cost));
-
-      addOptimisticMessage(transcript, translated, sourceLang, targetLang, 'voice');
-      sendMessage(conversationId, user!.uid, transcript, translated, sourceLang, targetLang, 'voice')
-        .catch((err) => console.error('Firestore send failed:', err));
-
+      addOptimisticMessage(text, translated, sourceLang, targetLang, 'text');
+      sendMessage(conversationId, user.uid, text, translated, sourceLang, targetLang, 'text')
+        .catch((err) => console.error('FaceToFace send failed:', err));
       sessionMsgCountRef.current += 1;
       if (sessionMsgCountRef.current % 10 === 0) showInterstitial();
-    } catch (err: any) {
-      console.error('[Whisper] transcription failed:', err);
-      showToast(err.message || 'Transcription failed', 'error');
+    } catch (err) {
+      console.error('FaceToFace send failed:', err);
     } finally {
       setSending(false);
-      resetRecordingState();
     }
   };
 
-  const handleTap = () => {
-    if (phase === 'processing') return;
-    if (phase === 'idle') { startRecording(); return; }
-    stopAndTranscribe();
-  };
   const handleClearConversation = () => {
     Alert.alert('Clear conversation', 'Delete all messages in this chat?', [
       { text: 'Cancel', style: 'cancel' },
@@ -256,220 +344,32 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     ]);
   };
 
-  // ── Keyboard mode ──────────────────────────────────────────────────────────
-
-  const handleTextChange = (text: string) => {
-    setInputText(text);
-    clearTimeout(previewTimer.current);
-
-    if (!text.trim()) {
-      setTranslationPreview('');
-      setIsPreviewLoading(false);
-      return;
-    }
-
-    setIsPreviewLoading(true);
-    previewTimer.current = setTimeout(async () => {
-      const { translated } = await translateAutoDetect(text, langA, langB);
-      setTranslationPreview(translated !== text ? translated : '');
-      setIsPreviewLoading(false);
-    }, 900);
-  };
-
-  const { showAd: showRewardedAd } = useRewardedAd();
-  const { showAd: showInterstitial } = useInterstitialAd();
-  const { showToast } = useToast();
-
-  const handleWatchAdForPoints = async () => {
-    if (!user) return;
-    showRewardedAd(async () => {
-      const result = await rewardAdWatch(user.uid);
-      setUserPoints(result.newTotal);
-      setShowPointsBanner(false);
-    });
-  };
-
-  const handleSend = async () => {
-    const text = inputText.trim();
-    if (!text || !user || sending) return;
-
-    const msgCount = conversation?.messageCount ?? messages.length;
-    const cost = getMessageCost(msgCount);
-
-    if (userPoints < cost) {
-      setShowPointsBanner(true);
-      return;
-    }
-
-    setInputText('');
-    setTranslationPreview('');
-    setIsPreviewLoading(false);
-    clearTimeout(previewTimer.current);
-    setSending(true);
-
-    try {
-      const { translated, sourceLang, targetLang } = await translateAutoDetect(text, langA, langB);
-
-      const ok = await deductPoints(user.uid, cost, 'message', conversationId);
-      if (ok) setUserPoints((p) => Math.max(0, p - cost));
-
-      addOptimisticMessage(text, translated, sourceLang, targetLang, 'text');
-      sendMessage(conversationId, user.uid, text, translated, sourceLang, targetLang, 'text').catch(
-        (err) => console.error('FaceToFace send failed:', err),
-      );
-      sessionMsgCountRef.current += 1;
-      if (sessionMsgCountRef.current % 10 === 0) {
-        showInterstitial();
-      }
-    } catch (err) {
-      console.error('FaceToFace send failed:', err);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render helpers ─────────────────────────────────────────────────────────
 
   const allMessages = useMemo(() => {
-    const dedupedOptimistic = optimisticMessages.filter((om) => {
-      return !messages.some((fm) => {
+    const langABase = langA.split('-')[0].split('_')[0];
+    const dedupedOptimistic = optimisticMessages.filter((om) =>
+      !messages.some((fm) => {
         const timeMatch =
-          !fm.createdAt ||
-          !om.createdAt ||
+          !fm.createdAt || !om.createdAt ||
           Math.abs(fm.createdAt.toMillis() - om.createdAt.toMillis()) < 15000;
-        return (
-          timeMatch &&
-          fm.originalText === om.originalText &&
-          fm.senderId === om.senderId &&
-          fm.sourceLanguage === om.sourceLanguage
-        );
-      });
-    });
-
-    const sorted = [...messages, ...dedupedOptimistic].sort((a, b) => {
-
+        return timeMatch && fm.originalText === om.originalText &&
+          fm.senderId === om.senderId && fm.sourceLanguage === om.sourceLanguage;
+      })
+    );
+    return [...messages, ...dedupedOptimistic].sort((a, b) => {
       const aTime = a.createdAt?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
       const bTime = b.createdAt?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
-      if (aTime !== bTime) return aTime - bTime;
-      return a.id.localeCompare(b.id);
+      return aTime !== bTime ? aTime - bTime : a.id.localeCompare(b.id);
     });
-    console.log('[Render] message count:', sorted.length, 'ids:', sorted.map((m) => m.id.slice(0, 8)));
-
-    return sorted;
-  }, [messages, optimisticMessages]);
+  }, [messages, optimisticMessages, langA]);
 
   const renderMessage = ({ item, index }: { item: Message; index: number }) => {
+    const langABase = langA.split('-')[0].split('_')[0];
     const prev = allMessages[index - 1];
     const showDate = index === 0 || !isSameDay(prev?.createdAt ?? null, item.createdAt);
     const itemBase = item.sourceLanguage.split('-')[0].split('_')[0];
     const isPersonA = itemBase === langABase;
-    const speakerInfo = isPersonA ? langAInfo : langBInfo;
-
-    const bubble = (
-      <View style={[styles.messageRow, isPersonA ? styles.rowRight : styles.rowLeft]}>
-        {!isPersonA && (
-          <View style={[styles.avatarSmall, {
-            backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
-            borderColor: isDark ? colors.glassBorder : colors.border,
-          }]}>
-            <FlagEmoji countryCode={langBInfo?.countryCode ?? 'BD'} size={18} />
-          </View>
-        )}
-        <View style={styles.messageContent}>
-          <View
-            style={[
-              styles.bubble,
-              isPersonA
-                ? [styles.bubbleRight, { backgroundColor: '#007AFF', shadowColor: '#007AFF' }]
-                : [styles.bubbleLeft, {
-                    backgroundColor: isDark ? colors.glass : colors.surface,
-                    borderColor: isDark ? colors.glassBorder : colors.border,
-                    shadowColor: colors.shadow,
-                  }],
-            ]}
-          >
-            <Text style={[styles.primaryText, { color: isPersonA ? '#FFF' : colors.text }]}>
-              {item.translatedText}
-            </Text>
-            {item.translatedText !== item.originalText && (
-              <Text
-                style={[
-                  styles.secondaryText,
-                  { color: isPersonA ? 'rgba(255,255,255,0.75)' : colors.textSecondary },
-                ]}
-              >
-                {item.originalText}
-              </Text>
-            )}
-          </View>
-          <View
-            style={[
-              styles.messageActions,
-              isPersonA ? { justifyContent: 'flex-end' } : { justifyContent: 'flex-start' },
-            ]}
-          >
-            <TouchableOpacity
-              style={[styles.actionBtn, {
-                borderColor: isDark ? colors.glassBorder : colors.border,
-                backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
-              }]}
-              disabled={loadingId === item.id}
-              onPress={async () => {
-                if (playingId === item.id) {
-                  pauseSpeaking();
-                  setPlayingId(null);
-                  setPausedId(item.id);
-                  return;
-                }
-                if (pausedId === item.id) {
-                  resumeSpeaking();
-                  setPlayingId(item.id);
-                  setPausedId(null);
-                  return;
-                }
-                setPlayingId(null);
-                setPausedId(null);
-                setLoadingId(item.id);
-                try {
-                  await speakText(item.translatedText, () => { setPlayingId(null); setPausedId(null); });
-                  setPlayingId(item.id);
-                } finally {
-                  setLoadingId(null);
-                }
-              }}
-            >
-              {loadingId === item.id
-                ? <ActivityIndicator size={14} color={colors.textSecondary} />
-                : <Ionicons
-                    name={playingId === item.id ? 'pause-outline' : 'play-outline'}
-                    size={14}
-                    color={pausedId === item.id ? '#007AFF' : colors.textSecondary}
-                  />}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionBtn, {
-                borderColor: isDark ? colors.glassBorder : colors.border,
-                backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
-              }]}
-              onPress={() => {
-                Clipboard.setString(item.translatedText);
-                showToast('Copied to clipboard', 'success');
-              }}
-            >
-              <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-        {isPersonA && (
-          <View style={[styles.avatarSmall, {
-            backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
-            borderColor: isDark ? colors.glassBorder : colors.border,
-          }]}>
-            <FlagEmoji countryCode={speakerInfo?.countryCode ?? 'US'} size={18} />
-          </View>
-        )}
-      </View>
-    );
 
     return (
       <View style={{ marginBottom: 12 }}>
@@ -482,37 +382,113 @@ export function FaceToFaceScreen({ route, navigation }: any) {
             <View style={[styles.dateLine, { backgroundColor: colors.border }]} />
           </View>
         )}
-        {bubble}
+        <View style={[styles.messageRow, isPersonA ? styles.rowRight : styles.rowLeft]}>
+          {!isPersonA && (
+            <View style={[styles.avatarSmall, {
+              backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
+              borderColor: isDark ? colors.glassBorder : colors.border,
+            }]}>
+              <FlagEmoji countryCode={langBInfo?.countryCode ?? 'BD'} size={18} />
+            </View>
+          )}
+          <View style={styles.messageContent}>
+            <View style={[
+              styles.bubble,
+              isPersonA
+                ? [styles.bubbleRight, { backgroundColor: '#007AFF', shadowColor: '#007AFF' }]
+                : [styles.bubbleLeft, {
+                    backgroundColor: isDark ? colors.glass : colors.surface,
+                    borderColor: isDark ? colors.glassBorder : colors.border,
+                    shadowColor: colors.shadow,
+                  }],
+            ]}>
+              <Text style={[styles.primaryText, { color: isPersonA ? '#FFF' : colors.text }]}>
+                {item.translatedText}
+              </Text>
+              {item.translatedText !== item.originalText && (
+                <Text style={[styles.secondaryText,
+                  { color: isPersonA ? 'rgba(255,255,255,0.75)' : colors.textSecondary }]}>
+                  {item.originalText}
+                </Text>
+              )}
+            </View>
+            <View style={[styles.messageActions, isPersonA ? { justifyContent: 'flex-end' } : { justifyContent: 'flex-start' }]}>
+              <TouchableOpacity
+                style={[styles.actionBtn, {
+                  borderColor: isDark ? colors.glassBorder : colors.border,
+                  backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
+                }]}
+                disabled={loadingId === item.id}
+                onPress={async () => {
+                  if (playingId === item.id) { pauseSpeaking(); setPlayingId(null); setPausedId(item.id); return; }
+                  if (pausedId === item.id) { resumeSpeaking(); setPlayingId(item.id); setPausedId(null); return; }
+                  setPlayingId(null); setPausedId(null); setLoadingId(item.id);
+                  try {
+                    await speakText(item.translatedText, () => { setPlayingId(null); setPausedId(null); });
+                    setPlayingId(item.id);
+                  } finally { setLoadingId(null); }
+                }}
+              >
+                {loadingId === item.id
+                  ? <ActivityIndicator size={14} color={colors.textSecondary} />
+                  : <Ionicons
+                      name={playingId === item.id ? 'pause-outline' : 'play-outline'}
+                      size={14}
+                      color={pausedId === item.id ? '#007AFF' : colors.textSecondary}
+                    />}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, {
+                  borderColor: isDark ? colors.glassBorder : colors.border,
+                  backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
+                }]}
+                onPress={() => { Clipboard.setString(item.translatedText); showToast('Copied', 'success'); }}
+              >
+                <Ionicons name="copy-outline" size={14} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+          {isPersonA && (
+            <View style={[styles.avatarSmall, {
+              backgroundColor: isDark ? colors.glass : colors.surfaceHighlight,
+              borderColor: isDark ? colors.glassBorder : colors.border,
+            }]}>
+              <FlagEmoji countryCode={langAInfo?.countryCode ?? 'US'} size={18} />
+            </View>
+          )}
+        </View>
       </View>
     );
   };
 
+  // ── Main render ────────────────────────────────────────────────────────────
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={{ flex: 1 }}
     >
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Header */}
-        <View
-          style={[
-            styles.topBar,
-            { paddingTop: insets.top + 8, borderBottomColor: colors.border },
-          ]}
-        >
+        <View style={[styles.topBar, { paddingTop: insets.top + 8, borderBottomColor: colors.border }]}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <View style={styles.langIndicators}>
-            <View style={[styles.langChip, { backgroundColor: colors.surface }]}>
-              <FlagEmoji countryCode={langAInfo?.countryCode ?? 'US'} size={14} />
-              <Text style={[styles.langChipText, { color: colors.text }]}>{langAInfo?.name}</Text>
+            <View style={[styles.langChipSelected, {
+              backgroundColor: isDark ? 'rgba(0,122,255,0.18)' : 'rgba(0,122,255,0.10)',
+              borderColor: isDark ? 'rgba(0,122,255,0.40)' : 'rgba(0,122,255,0.25)',
+            }]}>
+              <FlagEmoji countryCode={langAInfo?.countryCode ?? 'US'} size={13} />
+              <Text style={[styles.langChipSelectedText, { color: isDark ? '#5AC8FA' : '#007AFF' }]}>{langAInfo?.name}</Text>
             </View>
-            <Ionicons name="repeat" size={14} color={colors.textSecondary} />
-            <View style={[styles.langChip, { backgroundColor: colors.surface }]}>
-              <FlagEmoji countryCode={langBInfo?.countryCode ?? 'BD'} size={14} />
-              <Text style={[styles.langChipText, { color: colors.text }]}>{langBInfo?.name}</Text>
+            <Text style={[styles.langSep, { color: colors.textSecondary }]}>↔</Text>
+            <View style={[styles.langChipSelected, {
+              backgroundColor: isDark ? 'rgba(52,199,89,0.18)' : 'rgba(52,199,89,0.10)',
+              borderColor: isDark ? 'rgba(52,199,89,0.40)' : 'rgba(52,199,89,0.25)',
+            }]}>
+              <FlagEmoji countryCode={langBInfo?.countryCode ?? 'BD'} size={13} />
+              <Text style={[styles.langChipSelectedText, { color: isDark ? '#32D74B' : '#34C759' }]}>{langBInfo?.name}</Text>
             </View>
           </View>
           <TouchableOpacity onPress={() => setShowMenu((v) => !v)}>
@@ -523,24 +499,9 @@ export function FaceToFaceScreen({ route, navigation }: any) {
         {/* Menu dropdown */}
         {showMenu && (
           <>
-            <TouchableOpacity
-              style={StyleSheet.absoluteFill}
-              activeOpacity={1}
-              onPress={() => setShowMenu(false)}
-            />
-            <View
-              style={[
-                styles.menuDropdown,
-                { backgroundColor: colors.card, borderColor: colors.border },
-              ]}
-            >
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  setShowMenu(false);
-                  handleClearConversation();
-                }}
-              >
+            <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowMenu(false)} />
+            <View style={[styles.menuDropdown, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => { setShowMenu(false); handleClearConversation(); }}>
                 <Ionicons name="trash-outline" size={18} color="#FF3B30" />
                 <Text style={[styles.menuItemText, { color: '#FF3B30' }]}>Clear conversation</Text>
               </TouchableOpacity>
@@ -561,28 +522,19 @@ export function FaceToFaceScreen({ route, navigation }: any) {
             <View style={styles.emptyState}>
               <Ionicons name="people-outline" size={44} color={colors.textSecondary} />
               <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                Tap the mic to speak in either language.{'\n'}Tap again to stop and translate.
+                Speak in either language — translation happens automatically.
               </Text>
             </View>
           }
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
 
-        {/* Translation preview (keyboard mode) */}
+        {/* Keyboard mode preview */}
         {inputMode === 'keyboard' && (translationPreview || isPreviewLoading) && (
-          <View
-            style={[
-              styles.previewStrip,
-              { backgroundColor: colors.surface, borderTopColor: colors.border },
-            ]}
-          >
-            {isPreviewLoading ? (
-              <ActivityIndicator size="small" color={colors.textSecondary} />
-            ) : (
-              <Text style={[styles.previewText, { color: colors.textSecondary }]}>
-                {translationPreview}
-              </Text>
-            )}
+          <View style={[styles.previewStrip, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+            {isPreviewLoading
+              ? <ActivityIndicator size="small" color={colors.textSecondary} />
+              : <Text style={[styles.previewText, { color: colors.textSecondary }]}>{translationPreview}</Text>}
           </View>
         )}
 
@@ -598,7 +550,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
           <View style={[styles.pointsBanner, { backgroundColor: isDark ? 'rgba(255,59,48,0.15)' : '#FFEBEE' }]}>
             <Ionicons name="flash" size={14} color="#FF3B30" />
             <Text style={[styles.pointsBannerText, { color: '#FF3B30' }]}>
-              Need {getMessageCost(conversation?.messageCount ?? messages.length)} points to translate
+              Need {getMessageCost(conversation?.messageCount ?? messages.length)} points
             </Text>
             <TouchableOpacity onPress={handleWatchAdForPoints} style={styles.pointsBannerBtn}>
               <Text style={styles.pointsBannerBtnText}>Watch Ad +{POINTS.WATCH_AD_BASE}</Text>
@@ -607,20 +559,19 @@ export function FaceToFaceScreen({ route, navigation }: any) {
         )}
 
         {/* Input bar */}
-        <View
-          style={[
-            styles.inputBar,
-            { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: insets.bottom + 10 },
-          ]}
-        >
+        <View style={[styles.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: insets.bottom + 10 }]}>
           {inputMode === 'voice' ? (
             <View style={styles.voiceRow}>
               <TouchableOpacity
                 style={styles.modeToggle}
                 onPress={() => {
-                  if (phaseRef.current === 'recording') {
-                    recorder.stop().catch(() => {});
-                    resetRecordingState();
+                  if (phase === 'recording') {
+                    try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
+                    stopWaveform();
+                    setVoicePartial('');
+                    setPhase('idle');
+                    phaseRef.current = 'idle';
+                    autoRecordRef.current = false;
                   }
                   setInputMode('keyboard');
                 }}
@@ -629,26 +580,28 @@ export function FaceToFaceScreen({ route, navigation }: any) {
               </TouchableOpacity>
 
               <View style={styles.micCenter}>
+                {/* Live partial transcript */}
+                {voicePartial ? (
+                  <Text style={[styles.partialText, { color: colors.textSecondary }]} numberOfLines={2}>
+                    {voicePartial}
+                  </Text>
+                ) : null}
+
                 <TouchableOpacity onPress={handleTap} disabled={phase === 'processing'} activeOpacity={0.8}>
-                  <Animated.View
-                    style={[
-                      styles.micBtnLarge,
-                      {
-                        transform: [{ scale: pulseAnim }],
-                        backgroundColor: phase === 'recording' ? '#FF3B30' : '#007AFF',
-                        opacity: phase === 'processing' ? 0.6 : 1,
-                      },
-                    ]}
-                  >
-                    {phase === 'processing' ? (
-                      <ActivityIndicator size="small" color="#FFF" />
-                    ) : (
-                      <Ionicons name={phase === 'recording' ? 'stop' : 'mic'} size={28} color="#FFF" />
-                    )}
-                  </Animated.View>
+                  <View style={[
+                    styles.micBtnLarge,
+                    {
+                      backgroundColor: phase === 'recording' ? '#007AFF' : phase === 'processing' ? colors.surface : '#007AFF',
+                      opacity: phase === 'processing' ? 0.6 : 1,
+                    },
+                  ]}>
+                    {phase === 'processing'
+                      ? <ActivityIndicator size="small" color="#FFF" />
+                      : <Ionicons name={phase === 'recording' ? 'pause' : 'mic'} size={28} color="#FFF" />}
+                  </View>
                 </TouchableOpacity>
                 <Text style={[styles.micLabel, { color: colors.textSecondary }]}>
-                  {phase === 'idle' ? 'Tap to speak' : phase === 'recording' ? 'Tap to stop' : 'Translating…'}
+                  {phase === 'idle' ? 'Tap to speak' : phase === 'recording' ? 'Pause' : 'Translating…'}
                 </Text>
               </View>
 
@@ -656,13 +609,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
             </View>
           ) : (
             <View style={styles.keyboardRow}>
-              <TouchableOpacity
-                onPress={() => {
-                  setInputText('');
-                  setTranslationPreview('');
-                  setInputMode('voice');
-                }}
-              >
+              <TouchableOpacity onPress={() => { setInputText(''); setTranslationPreview(''); setInputMode('voice'); }}>
                 <View style={[styles.actionBtn2, { backgroundColor: colors.surface }]}>
                   <Ionicons name="mic" size={20} color={colors.textSecondary} />
                 </View>
@@ -680,39 +627,20 @@ export function FaceToFaceScreen({ route, navigation }: any) {
                 />
               </View>
               <TouchableOpacity onPress={handleSend} disabled={sending || !inputText.trim()}>
-                <View
-                  style={[
-                    styles.actionBtn2,
-                    {
-                      backgroundColor: sending || !inputText.trim() ? colors.surface : '#007AFF',
-                    },
-                  ]}
-                >
-                  {sending ? (
-                    <ActivityIndicator size="small" color={colors.textSecondary} />
-                  ) : (
-                    <Ionicons
-                      name="send"
-                      size={16}
-                      color={inputText.trim() ? '#FFF' : colors.textSecondary}
-                    />
-                  )}
+                <View style={[styles.actionBtn2, { backgroundColor: sending || !inputText.trim() ? colors.surface : '#007AFF' }]}>
+                  {sending
+                    ? <ActivityIndicator size="small" color={colors.textSecondary} />
+                    : <Ionicons name="send" size={16} color={inputText.trim() ? '#FFF' : colors.textSecondary} />}
                 </View>
               </TouchableOpacity>
             </View>
           )}
 
-          {/* Live waveform while recording */}
+          {/* Live waveform */}
           {phase === 'recording' && (
             <View style={styles.waveformStrip}>
               {waveformBars.map((bar, i) => (
-                <Animated.View
-                  key={i}
-                  style={[
-                    styles.waveBar,
-                    { transform: [{ scaleY: bar }] },
-                  ]}
-                />
+                <Animated.View key={i} style={[styles.waveBar, { transform: [{ scaleY: bar }] }]} />
               ))}
             </View>
           )}
@@ -725,259 +653,78 @@ export function FaceToFaceScreen({ route, navigation }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingBottom: 8, borderBottomWidth: 1,
   },
-  langIndicators: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  langIndicators: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  langChipSelected: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 9, paddingVertical: 5, borderRadius: 10, borderWidth: 1,
   },
-  langChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  langChipText: { fontSize: 13, fontWeight: '500' },
+  langChipSelectedText: { fontSize: 12, fontWeight: '600' },
+  langSep: { fontSize: 11, opacity: 0.5 },
   menuDropdown: {
-    position: 'absolute',
-    top: 50,
-    right: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-    zIndex: 100,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 10,
+    position: 'absolute', top: 50, right: 12, borderRadius: 12,
+    borderWidth: 1, paddingVertical: 6, paddingHorizontal: 4,
+    zIndex: 100, shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15, shadowRadius: 12, elevation: 10,
   },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 },
   menuItemText: { fontSize: 15, fontWeight: '500' },
   messagesList: { padding: 16, flexGrow: 1 },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 80,
-    gap: 14,
-    paddingHorizontal: 32,
-  },
+  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 80, gap: 14, paddingHorizontal: 32 },
   emptyText: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
-  messageRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-  },
+  messageRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   rowLeft: { justifyContent: 'flex-start' },
   rowRight: { justifyContent: 'flex-end' },
-  avatarSmall: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-  },
+  avatarSmall: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
   messageContent: { maxWidth: '75%' },
   bubble: {
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 4,
+    borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 4,
   },
   bubbleLeft: { borderBottomLeftRadius: 4 },
   bubbleRight: { borderBottomRightRadius: 4 },
   primaryText: { fontSize: 15, lineHeight: 20, fontWeight: '500' },
   secondaryText: { fontSize: 14, lineHeight: 20, marginTop: 6, fontStyle: 'italic' },
-  messageActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 4,
-    paddingHorizontal: 4,
-  },
-  actionBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  deleteBg: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 80,
-    backgroundColor: '#FF3B30',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  deleteBtn: {
-    alignItems: 'center',
-    gap: 2,
-  },
-  deleteText: {
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: '600',
-  },
+  messageActions: { flexDirection: 'row', gap: 10, marginTop: 4, paddingHorizontal: 4 },
+  actionBtn: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   previewStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 16, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth,
   },
   previewText: { fontSize: 13, fontStyle: 'italic', lineHeight: 18, flex: 1 },
-  inputBar: {
-    borderTopWidth: 1,
-    paddingTop: 10,
-    paddingHorizontal: 12,
-  },
-  voiceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
-  modeToggle: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  micCenter: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-  },
-  micLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
+  inputBar: { borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 12 },
+  voiceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
+  modeToggle: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
+  micCenter: { flex: 1, alignItems: 'center', gap: 6, paddingVertical: 8 },
+  micLabel: { fontSize: 12, fontWeight: '500' },
+  partialText: { fontSize: 13, fontStyle: 'italic', textAlign: 'center', paddingHorizontal: 16, marginBottom: 4 },
   micBtnLarge: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 5,
-    zIndex: 10,
+    width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#007AFF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3,
+    shadowRadius: 10, elevation: 5,
   },
   waveformStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 8,
-    height: 36,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 4, paddingVertical: 8, height: 36,
   },
-  waveBar: {
-    width: 4,
-    height: 24,
-    borderRadius: 2,
-    backgroundColor: '#FF3B30',
-  },
-  keyboardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  inputWrapper: {
-    flex: 1,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    maxHeight: 100,
-  },
+  waveBar: { width: 4, height: 24, borderRadius: 2, backgroundColor: '#007AFF' },
+  keyboardRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  inputWrapper: { flex: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, maxHeight: 100 },
   input: { fontSize: 16, lineHeight: 20 },
-  actionBtn2: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dateSeparator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginVertical: 16,
-    paddingHorizontal: 16,
-  },
-  dateLine: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-  },
-  dateText: {
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  costIndicator: {
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-  },
-  costIndicatorText: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
+  actionBtn2: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  dateSeparator: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 16, paddingHorizontal: 16 },
+  dateLine: { flex: 1, height: StyleSheet.hairlineWidth },
+  dateText: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  costIndicator: { paddingHorizontal: 16, paddingVertical: 4, borderTopWidth: StyleSheet.hairlineWidth, alignItems: 'center' },
+  costIndicatorText: { fontSize: 11, fontWeight: '500' },
   pointsBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.05)',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(0,0,0,0.05)',
   },
-  pointsBannerText: {
-    fontSize: 12,
-    fontWeight: '600',
-    flex: 1,
-    marginLeft: 6,
-  },
-  pointsBannerBtn: {
-    backgroundColor: '#FF3B30',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  pointsBannerBtnText: {
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
+  pointsBannerText: { fontSize: 12, fontWeight: '600', flex: 1, marginLeft: 6 },
+  pointsBannerBtn: { backgroundColor: '#FF3B30', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  pointsBannerBtnText: { color: '#FFF', fontSize: 11, fontWeight: '700' },
 });

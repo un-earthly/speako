@@ -32,7 +32,6 @@ export function HomeScreen({ navigation }: any) {
   const [theirLanguage, setTheirLanguage] = useState(user?.lastTheirLanguage || '');
   const [showMyLangPicker, setShowMyLangPicker] = useState(false);
   const [showTheirLangPicker, setShowTheirLangPicker] = useState(false);
-  const [showActions, setShowActions] = useState(false);
   const [starting, setStarting] = useState(false);
   const [recentConvos, setRecentConvos] = useState<Conversation[]>([]);
   const insets = useSafeAreaInsets();
@@ -52,18 +51,16 @@ export function HomeScreen({ navigation }: any) {
     (lang: Language) => {
       setMyLanguage(lang.code);
       updateUserProfile({ preferredLanguage: lang.code }).catch(() => { });
-      navigation.navigate('VoiceVerification', { languageCode: lang.code, onVerified: () => { } });
     },
-    [navigation, updateUserProfile],
+    [updateUserProfile],
   );
 
   const handleTheirLanguageSelect = useCallback(
     (lang: Language) => {
       setTheirLanguage(lang.code);
       updateUserProfile({ lastTheirLanguage: lang.code }).catch(() => { });
-      navigation.navigate('VoiceVerification', { languageCode: lang.code, onVerified: () => { } });
     },
-    [navigation, updateUserProfile],
+    [updateUserProfile],
   );
 
   const swapLanguages = () => {
@@ -116,18 +113,32 @@ export function HomeScreen({ navigation }: any) {
       <View style={[styles.headerArea, { height: SCREEN_HEIGHT * 0.30, paddingTop: insets.top + 8 }]}>
         <View style={styles.headerRow}>
           <Image source={require('../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
-          <TouchableOpacity
-            style={[
-              styles.avatar,
-              {
-                backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.08)',
-                borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.12)',
-              },
-            ]}
-            onPress={() => navigation.navigate(Routes.Account)}
-          >
-            <Ionicons name="person" size={20} color={iconColor} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={[
+                styles.avatar,
+                {
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.08)',
+                  borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.12)',
+                },
+              ]}
+              onPress={() => navigation.navigate(Routes.FindPerson)}
+            >
+              <Ionicons name="search" size={20} color={iconColor} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.avatar,
+                {
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.08)',
+                  borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.12)',
+                },
+              ]}
+              onPress={() => navigation.navigate(Routes.Account)}
+            >
+              <Ionicons name="person" size={20} color={iconColor} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -209,86 +220,22 @@ export function HomeScreen({ navigation }: any) {
 
       {/* Action area — flex, vertically centered between card and ad */}
       <View style={styles.actionArea}>
-        {!showActions ? (
-          <TouchableOpacity
-            style={styles.startBtn}
-            onPress={() => setShowActions(true)}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="mic-outline" size={18} color="#FFFFFF" />
-            <Text style={styles.startBtnText}>Start Conversation</Text>
-          </TouchableOpacity>
-        ) : (
-          <>
-            {/* Row of 3 primary actions */}
-            <View style={styles.actionRow}>
-              <TouchableOpacity
-                style={[styles.actionChip, { backgroundColor: '#007AFF' }]}
-                onPress={startNewConversation}
-                activeOpacity={0.85}
-                disabled={starting}
-              >
-                <Ionicons name="add-circle-outline" size={22} color="#FFFFFF" />
-                <Text style={styles.actionChipText}>{starting ? '...' : 'New'}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.actionChip,
-                  { backgroundColor: '#34C759' },
-                  (!myLanguage || !theirLanguage || starting) && styles.startBtnDisabled,
-                ]}
-                onPress={startFaceToFace}
-                activeOpacity={0.85}
-                disabled={!myLanguage || !theirLanguage || starting}
-              >
-                <Ionicons name="people" size={22} color="#FFFFFF" />
-                <Text style={styles.actionChipText}>Talk</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.actionChip,
-                  {
-                    backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.04)',
-                    borderWidth: 1.5,
-                    borderColor: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.15)',
-                  },
-                ]}
-                onPress={() => navigation.navigate(Routes.FindPerson)}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="search-outline" size={22} color={iconColor} />
-                <Text style={[styles.actionChipText, { color: iconColor }]}>Find</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Join action — wider, below the row */}
-            <TouchableOpacity
-              style={[
-                styles.actionChipWide,
-                {
-                  borderWidth: 1.5,
-                  borderColor: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.15)',
-                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)',
-                },
-              ]}
-              onPress={() => navigation.navigate(Routes.Join)}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="enter-outline" size={18} color={iconColor} />
-              <Text style={[styles.actionChipWideText, { color: iconColor }]}>Join with Invite Code</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={() => setShowActions(false)} style={styles.cancelBtn}>
-              <Text style={[styles.cancelText, { color: iconColorMuted }]}>Cancel</Text>
-            </TouchableOpacity>
-          </>
-        )}
+        <TouchableOpacity
+          style={[
+            styles.actionChip,
+            { backgroundColor: '#34C759', alignSelf: 'center', width: '84%' },
+            (!myLanguage || !theirLanguage || starting) && styles.startBtnDisabled,
+          ]}
+          onPress={startFaceToFace}
+          activeOpacity={0.85}
+          disabled={!myLanguage || !theirLanguage || starting}
+        >
+          <Ionicons name="people" size={22} color="#FFFFFF" />
+          <Text style={styles.actionChipText}>{starting ? '...' : 'Talk'}</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Recent conversations — hidden while action buttons are expanded to avoid layout overflow */}
-      {recentConvos.length > 0 && !showActions && (
+      {recentConvos.length > 0 && (
         <View style={styles.recentSection}>
           <Text style={[styles.recentLabel, { color: colors.textSecondary }]}>Recent</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recentList}>
@@ -390,6 +337,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: { height: 32, width: 120 },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   avatar: {
     width: 38,
     height: 38,
@@ -469,38 +421,15 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  startBtn: {
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#007AFF',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '84%',
-    gap: 8,
-    shadowColor: '#007AFF',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 6,
-  },
   startBtnDisabled: { opacity: 0.45 },
-  startBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    width: '92%',
-  },
   actionChip: {
-    flex: 1,
-    height: 72,
+    height: 56,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 4,
+    flexDirection: 'row',
+    gap: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.15,
@@ -512,25 +441,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  actionChipWide: {
-    flexDirection: 'row',
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '92%',
-    gap: 8,
-  },
-  actionChipWideText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  cancelBtn: {
-    paddingVertical: 6,
-    alignItems: 'center',
-  },
-  cancelText: { fontSize: 13, fontWeight: '500' },
 
   /* ── Recent conversations ── */
   recentSection: {

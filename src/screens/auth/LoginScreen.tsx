@@ -14,15 +14,15 @@ import { LoadingOverlay } from '../../components/common/LoadingOverlay';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { useToast } from '../../contexts/ToastContext';
 import { useBiometrics } from '../../hooks/useBiometrics';
-import { getAuthErrorMessage } from '../../utils/firebaseErrors';
 
 export function LoginScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState('Biometrics');
 
-  const { sendOTP, verifyOTP, loginWithGoogle } = useAuth();
+  const { loginWithPassword, sendOTP } = useAuth();
   const { colors } = useTheme();
   const { showToast } = useToast();
   const { promptAsync, loading: googleLoading } = useGoogleAuth();
@@ -40,13 +40,39 @@ export function LoginScreen({ navigation }: any) {
     })();
   }, []);
 
-  const handleSendCode = async () => {
+  const handleSignIn = async () => {
     if (!email.trim()) { showToast('Please enter your email', 'error'); return; }
+    if (!/\S+@\S+\.\S+/.test(email)) { showToast('Please enter a valid email', 'error'); return; }
+    if (!password) { showToast('Please enter your password', 'error'); return; }
+    setLoading(true);
+    try {
+      await loginWithPassword(email.trim().toLowerCase(), password);
+    } catch (err: any) {
+      const code = err?.code ?? '';
+      let msg = 'Sign in failed. Please try again.';
+      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+        msg = 'Incorrect email or password.';
+      } else if (code === 'auth/too-many-requests') {
+        msg = 'Too many attempts. Please try again later.';
+      } else if (err.message) {
+        msg = err.message;
+      }
+      showToast(msg, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) { showToast('Please enter your email first', 'error'); return; }
     if (!/\S+@\S+\.\S+/.test(email)) { showToast('Please enter a valid email', 'error'); return; }
     setLoading(true);
     try {
       await sendOTP(email.trim().toLowerCase());
-      navigation.navigate(Routes.OTP, { email: email.trim().toLowerCase() });
+      navigation.navigate(Routes.OTP, {
+        email: email.trim().toLowerCase(),
+        mode: 'forgotPassword',
+      });
     } catch (err: any) {
       const code = err?.code ?? '';
       const msg = code.includes('not-found') || code.includes('unavailable')
@@ -76,7 +102,7 @@ export function LoginScreen({ navigation }: any) {
           <Image source={require('../../../assets/login-banner.png')} style={styles.banner} resizeMode="contain" />
           <Text style={[styles.title, { color: colors.text }]}>Welcome Back 👋</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Enter your email and we'll send you a sign-in code
+            Sign in with your email and password
           </Text>
         </View>
 
@@ -89,10 +115,21 @@ export function LoginScreen({ navigation }: any) {
             autoCapitalize="none"
             keyboardType="email-address"
           />
+          <Input
+            label="Password"
+            placeholder="Enter your password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+
+          <TouchableOpacity style={styles.forgotBtn} onPress={handleForgotPassword} disabled={loading || googleLoading}>
+            <Text style={{ color: '#007AFF', fontSize: 13, fontWeight: '500' }}>Forgot Password?</Text>
+          </TouchableOpacity>
 
           <Button
-            title="Send Code"
-            onPress={handleSendCode}
+            title="Sign In"
+            onPress={handleSignIn}
             loading={false}
             disabled={loading || googleLoading}
           />
@@ -125,7 +162,7 @@ export function LoginScreen({ navigation }: any) {
           />
         </View>
 
-        <LoadingOverlay visible={loading || googleLoading} message="Sending code..." />
+        <LoadingOverlay visible={loading || googleLoading} message={loading ? 'Signing in...' : 'Connecting...'} />
 
         <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
           <Text style={{ color: colors.textSecondary }}>Don't have an account? </Text>
@@ -145,6 +182,12 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '700', marginBottom: 6 },
   subtitle: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
   form: { width: '100%', marginTop: 8 },
+  forgotBtn: {
+    alignSelf: 'flex-end',
+    marginBottom: 16,
+    marginTop: -4,
+    paddingVertical: 4,
+  },
   biometricBtn: {
     flexDirection: 'row',
     alignItems: 'center',
