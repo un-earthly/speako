@@ -45,6 +45,9 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   const { conversationId, langA, langB } = route.params;
   const { user, points: authPoints } = useAuth();
   const { colors, isDark } = useTheme();
+  const { showToast } = useToast();
+  const { showAd: showRewardedAd } = useRewardedAd();
+  const { showAd: showInterstitial } = useInterstitialAd();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
@@ -73,8 +76,8 @@ export function FaceToFaceScreen({ route, navigation }: any) {
 
   const phaseRef = useRef<Phase>('idle');
   const autoRecordRef = useRef(true);
-  // Alternates locale between langA and langB on each restart so both speakers get good recognition
   const useLocaleARef = useRef(true);
+  const voicePartialRef = useRef(''); // tracks latest interim text as fallback on manual stop
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
@@ -109,17 +112,23 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     return () => { if (previewTimer.current) clearTimeout(previewTimer.current); };
   }, []);
 
-  // ── Auto-start on mount ────────────────────────────────────────────────────
+  // ── Permission pre-warm + auto-start ──────────────────────────────────────
 
   useEffect(() => {
     autoRecordRef.current = true;
-    const timer = setTimeout(() => {
-      if (autoRecordRef.current) startRecording();
-    }, 600);
+    ExpoSpeechRecognitionModule.requestPermissionsAsync()
+      .then(({ granted }) => {
+        if (!granted) { showToast('Microphone permission required', 'error'); return; }
+        const timer = setTimeout(() => {
+          if (autoRecordRef.current) startRecording();
+        }, 500);
+        return () => clearTimeout(timer);
+      })
+      .catch((e) => console.error('[SpeechRec] permission error:', e));
+
     return () => {
-      clearTimeout(timer);
       autoRecordRef.current = false;
-      try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
+      try { ExpoSpeechRecognitionModule.abort(); } catch { /* ignore */ }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -130,21 +139,19 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     const text = e.results[0]?.transcript ?? '';
     if (e.isFinal) {
       setVoicePartial('');
+      voicePartialRef.current = '';
       stopWaveform();
-      setPhase('processing');
-      phaseRef.current = 'processing';
-      if (text) {
+      if (text.trim()) {
+        // Got a transcript — translate it. The 'end' event won't auto-restart
+        // while we're in the 'processing' phase; handleTranslateAndSend restarts.
+        setPhase('processing');
+        phaseRef.current = 'processing';
         handleTranslateAndSend(text);
-      } else {
-        // Empty result — restart immediately
-        setPhase('idle');
-        phaseRef.current = 'idle';
-        if (autoRecordRef.current) {
-          setTimeout(() => { if (autoRecordRef.current) startRecording(); }, 300);
-        }
       }
+      // Empty result: leave restart to the 'end' event below.
     } else {
       setVoicePartial(text);
+      voicePartialRef.current = text;
     }
   });
 
@@ -157,34 +164,52 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     });
   });
 
-  useSpeechRecognitionEvent('error', () => {
+  useSpeechRecognitionEvent('error', (e) => {
+    // 'aborted' = we intentionally stopped (pause / mode switch / unmount).
+    // Those paths handle their own follow-up, so don't kick off a restart here
+    // (doing so previously created an abort→start→error→abort loop).
+    if (e.error === 'aborted') return;
+    if (e.error !== 'no-speech') {
+      console.warn('[SpeechRec] error:', e.error, e.message);
+    }
+    // For genuine errors (no-speech, network, etc.) just unwind; the 'end' event
+    // that follows handles any auto-restart.
+    if (phaseRef.current !== 'processing') {
+      stopWaveform();
+      setVoicePartial('');
+      voicePartialRef.current = '';
+    }
+  });
+
+  // The session has fully stopped. This is the single place that decides whether
+  // to start listening again, so restarts can't race a still-active recognizer.
+  useSpeechRecognitionEvent('end', () => {
     stopWaveform();
-    setVoicePartial('');
+    if (phaseRef.current === 'processing') return; // restart happens after translate
     setPhase('idle');
     phaseRef.current = 'idle';
-    // Retry after error if in auto mode
     if (autoRecordRef.current) {
-      setTimeout(() => { if (autoRecordRef.current) startRecording(); }, 800);
+      setTimeout(() => {
+        if (autoRecordRef.current && phaseRef.current === 'idle') startRecording();
+      }, 300);
     }
   });
 
   // ── Recording ──────────────────────────────────────────────────────────────
 
-  const startRecording = async () => {
+  const startRecording = () => {
     if (phaseRef.current !== 'idle') return;
     try {
-      const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (!granted) { showToast('Microphone permission required', 'error'); return; }
-
-      // Alternate locale between langA and langB so both speakers are heard accurately
       const currentLangInfo = useLocaleARef.current ? langAInfo : langBInfo;
       const locale = currentLangInfo
         ? `${currentLangInfo.code}-${currentLangInfo.countryCode}`
         : 'en-US';
-
+      // Per-utterance: the recognizer stops on its own when the speaker pauses,
+      // emitting a final result + 'end', which drives the next listen cleanly.
       ExpoSpeechRecognitionModule.start({
         lang: locale,
         interimResults: true,
+        continuous: false,
         volumeChangeEventOptions: { enabled: true, intervalMillis: 100 },
       });
       setPhase('recording');
@@ -203,20 +228,31 @@ export function FaceToFaceScreen({ route, navigation }: any) {
       startRecording();
       return;
     }
-    // Pause: stop listening and don't auto-restart
+    // Pause: disable auto-restart, then ask the recognizer to finalize (stop,
+    // not abort — stop returns a final result so we can translate the utterance).
+    // If no final result arrives (device quirk), fall back to the last interim
+    // transcript captured at tap time.
     autoRecordRef.current = false;
-    stopWaveform();
-    setVoicePartial('');
-    setPhase('idle');
-    phaseRef.current = 'idle';
+    const fallback = voicePartialRef.current;
     try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
+
+    setTimeout(() => {
+      if (phaseRef.current === 'processing') return; // final result already handled it
+      voicePartialRef.current = '';
+      setVoicePartial('');
+      stopWaveform();
+      if (fallback.trim()) {
+        setPhase('processing');
+        phaseRef.current = 'processing';
+        handleTranslateAndSend(fallback);
+      } else {
+        setPhase('idle');
+        phaseRef.current = 'idle';
+      }
+    }, 700);
   };
 
   // ── Translate & send ───────────────────────────────────────────────────────
-
-  const { showAd: showRewardedAd } = useRewardedAd();
-  const { showAd: showInterstitial } = useInterstitialAd();
-  const { showToast } = useToast();
 
   const handleTranslateAndSend = async (transcript: string) => {
     const msgCount = conversation?.messageCount ?? messages.length;
@@ -566,7 +602,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
                 style={styles.modeToggle}
                 onPress={() => {
                   if (phase === 'recording') {
-                    try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
+                    try { ExpoSpeechRecognitionModule.abort(); } catch { /* ignore */ }
                     stopWaveform();
                     setVoicePartial('');
                     setPhase('idle');
