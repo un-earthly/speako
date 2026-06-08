@@ -8,6 +8,8 @@ import {
   Image,
   TextInput,
   Switch,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -109,7 +111,10 @@ export function EditProfileScreen({ navigation }: any) {
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={[styles.root, { backgroundColor: colors.background }]}
+    >
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -188,7 +193,7 @@ export function EditProfileScreen({ navigation }: any) {
       <View style={{ paddingBottom: insets.bottom + 72 }}>
         <AdBanner />
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

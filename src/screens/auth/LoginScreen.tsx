@@ -91,7 +91,7 @@ export function LoginScreen({ navigation }: any) {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={{ flex: 1, paddingTop: insets.top }}
     >
       <ScrollView

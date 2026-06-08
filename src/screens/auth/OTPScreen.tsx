@@ -152,7 +152,7 @@ export function OTPScreen({ route, navigation }: any) {
   if (passwordStep) {
     return (
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1, paddingTop: insets.top }}
       >
         <ScrollView
@@ -196,7 +196,7 @@ export function OTPScreen({ route, navigation }: any) {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={{ flex: 1, paddingTop: insets.top }}
     >
       <ScrollView
