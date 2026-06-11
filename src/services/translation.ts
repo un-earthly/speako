@@ -133,12 +133,13 @@ async function translateChunked(
 
 // ── Auto-detect source language and translate ─────────────────────────────────
 
-// Primary: GPT detects language + translates in one call (accurate, single round-trip).
-// Fallback: Google Translate sl=auto (free, no key needed).
+// Primary: GPT understands the (possibly code-mixed) utterance with conversation
+// context and translates in one call. Fallback: Google Translate sl=auto.
 export async function translateAutoDetect(
   text: string,
   langA: string,
   langB: string,
+  context: { history?: string; acousticHint?: string } = {},
 ): Promise<{ translated: string; sourceLang: string; targetLang: string }> {
   const langABase = langA.split('-')[0];
   const langBBase = langB.split('-')[0];
@@ -149,8 +150,8 @@ export async function translateAutoDetect(
   const langAName = getLanguageByCode(langA)?.name ?? langA;
   const langBName = getLanguageByCode(langB)?.name ?? langB;
 
-  // 1. GPT — detects language and translates in one call
-  const gpt = await detectAndTranslate(text, langA, langB, langAName, langBName);
+  // 1. GPT — understands code-mixed speech in context and translates in one call
+  const gpt = await detectAndTranslate(text, langA, langB, langAName, langBName, context);
   if (gpt) return gpt;
 
   // 2. Google Translate fallback — sl=auto gives detected language for free

@@ -31,6 +31,7 @@ import {
   type Conversation,
 } from '../../services/firestore';
 import { translateAutoDetect } from '../../services/translation';
+import { transcribeAudio } from '../../services/whisper';
 import { isSameDay, formatDateLabel } from '../../utils/date';
 import { getMessageCost } from '../../utils/points';
 import { POINTS, deductPoints, getUserPoints, rewardAdWatch } from '../../services/rewards';
@@ -76,8 +77,31 @@ export function FaceToFaceScreen({ route, navigation }: any) {
 
   const phaseRef = useRef<Phase>('idle');
   const autoRecordRef = useRef(true);
-  const useLocaleARef = useRef(true);
   const voicePartialRef = useRef(''); // tracks latest interim text as fallback on manual stop
+
+  // ── Hybrid speech refs ───────────────────────────────────────────────────────
+  // Native recognizer gives us instant live captions + records each turn to a
+  // file; the recorded file is then sent to Whisper for the authoritative,
+  // language-agnostic transcript. We drive end-of-turn ourselves with a silence
+  // timer so a breath no longer cuts the sentence.
+  const recordedUriRef = useRef<string | null>(null); // audio file for the current turn
+  const finalTextRef = useRef('');                    // native final transcript (fallback)
+  const hadSpeechRef = useRef(false);                 // any audible speech this turn?
+  const lastVoiceTsRef = useRef(0);                   // last time we heard voice
+  const speechStartTsRef = useRef(0);                 // when this turn's speech began
+  const endTurnArmedRef = useRef(false);              // guard: end-of-turn fired once
+  // Seed locale for the native LIVE CAPTION only (Whisper is authoritative and
+  // auto-detects, so this never constrains the actual translation). Starts on A,
+  // tracks the last side we saw so captions sharpen over a conversation.
+  const seedLocaleRef = useRef(
+    langAInfo ? `${langAInfo.code}-${langAInfo.countryCode}` : 'en-US'
+  );
+  const messagesRef = useRef<Message[]>([]);
+
+  // End-of-turn tuning.
+  const SILENCE_MS = 1400;   // silence after speech before we finalize the turn
+  const MIN_SPEECH_MS = 500; // ignore sub-half-second blips (coughs, taps)
+  const VOICE_LEVEL = 0;     // volumechange value above this counts as audible
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
@@ -108,6 +132,12 @@ export function FaceToFaceScreen({ route, navigation }: any) {
 
   useEffect(() => { setUserPoints(authPoints); }, [authPoints]);
 
+  // Keep a ref of recent messages so speech-event closures can build fresh
+  // conversation context for the Whisper prompt + GPT translation.
+  useEffect(() => {
+    messagesRef.current = [...messages, ...optimisticMessages];
+  }, [messages, optimisticMessages]);
+
   useEffect(() => {
     return () => { if (previewTimer.current) clearTimeout(previewTimer.current); };
   }, []);
@@ -133,22 +163,58 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Conversation context for the model ────────────────────────────────────
+  // Recent lines ground Whisper + GPT in topic, names, and each speaker's way of
+  // talking — the single biggest accuracy lever for short, code-mixed utterances.
+  const buildHistory = (): string => {
+    const recent = messagesRef.current.slice(-4);
+    return recent
+      .map((m) => {
+        const name = getLanguageByCode(m.sourceLanguage)?.name ?? 'Speaker';
+        return `${name}: ${m.originalText}`;
+      })
+      .join('\n');
+  };
+
+  // Salient terms (names, brands, rare words) to bias the on-device live caption.
+  const buildContextualStrings = (): string[] => {
+    const words = messagesRef.current
+      .slice(-4)
+      .flatMap((m) => m.originalText.split(/\s+/))
+      .filter((w) => w.length > 3 && /[A-Z]/.test(w[0])); // capitalised → likely a name/brand
+    return Array.from(new Set(words)).slice(0, 20);
+  };
+
+  // ── End-of-turn finalize ──────────────────────────────────────────────────
+  // Single guarded entry point. Stops the recognizer so it flushes the recorded
+  // audio file (audioend) and final transcript, then 'end' drives processing.
+  const armEndTurn = () => {
+    if (endTurnArmedRef.current) return;
+    if (phaseRef.current !== 'recording') return;
+    endTurnArmedRef.current = true;
+    setPhase('processing');
+    phaseRef.current = 'processing';
+    try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
+  };
+
   // ── Speech recognition events ──────────────────────────────────────────────
+
+  useSpeechRecognitionEvent('audiostart', (e) => {
+    recordedUriRef.current = e.uri ?? null;
+  });
+  useSpeechRecognitionEvent('audioend', (e) => {
+    if (e.uri) recordedUriRef.current = e.uri;
+  });
 
   useSpeechRecognitionEvent('result', (e) => {
     const text = e.results[0]?.transcript ?? '';
+    if (text.trim()) hadSpeechRef.current = true;
     if (e.isFinal) {
-      setVoicePartial('');
-      voicePartialRef.current = '';
-      stopWaveform();
-      if (text.trim()) {
-        // Got a transcript — translate it. The 'end' event won't auto-restart
-        // while we're in the 'processing' phase; handleTranslateAndSend restarts.
-        setPhase('processing');
-        phaseRef.current = 'processing';
-        handleTranslateAndSend(text);
-      }
-      // Empty result: leave restart to the 'end' event below.
+      finalTextRef.current = text;
+      // On devices that auto-stop (Android ≤12, iOS 17-), a final result is the
+      // end of the turn even though we didn't call stop() ourselves. Arm here so
+      // those turns still get processed via 'end'.
+      if (text.trim()) armEndTurn();
     } else {
       setVoicePartial(text);
       voicePartialRef.current = text;
@@ -162,18 +228,32 @@ export function FaceToFaceScreen({ route, navigation }: any) {
       const v = Math.max(0.1, normalized + (Math.random() * 0.2 - 0.1));
       Animated.timing(bar, { toValue: v, duration: 80, useNativeDriver: true }).start();
     });
+
+    // Silence-based endpointing: we end the turn only after a real pause, so a
+    // mid-sentence breath no longer triggers a premature translation.
+    if (phaseRef.current !== 'recording') return;
+    const now = Date.now();
+    if (vol > VOICE_LEVEL) {
+      lastVoiceTsRef.current = now;
+      if (!hadSpeechRef.current) {
+        hadSpeechRef.current = true;
+        speechStartTsRef.current = now;
+      }
+    } else if (
+      hadSpeechRef.current &&
+      now - lastVoiceTsRef.current > SILENCE_MS &&
+      now - speechStartTsRef.current > MIN_SPEECH_MS
+    ) {
+      armEndTurn();
+    }
   });
 
   useSpeechRecognitionEvent('error', (e) => {
     // 'aborted' = we intentionally stopped (pause / mode switch / unmount).
-    // Those paths handle their own follow-up, so don't kick off a restart here
-    // (doing so previously created an abort→start→error→abort loop).
     if (e.error === 'aborted') return;
     if (e.error !== 'no-speech') {
       console.warn('[SpeechRec] error:', e.error, e.message);
     }
-    // For genuine errors (no-speech, network, etc.) just unwind; the 'end' event
-    // that follows handles any auto-restart.
     if (phaseRef.current !== 'processing') {
       stopWaveform();
       setVoicePartial('');
@@ -181,11 +261,16 @@ export function FaceToFaceScreen({ route, navigation }: any) {
     }
   });
 
-  // The session has fully stopped. This is the single place that decides whether
-  // to start listening again, so restarts can't race a still-active recognizer.
+  // The session has fully stopped. If we armed an end-of-turn, the recorded audio
+  // is now flushed — hand it to Whisper. Otherwise just idle/restart.
   useSpeechRecognitionEvent('end', () => {
     stopWaveform();
-    if (phaseRef.current === 'processing') return; // restart happens after translate
+    setVoicePartial('');
+    voicePartialRef.current = '';
+    if (phaseRef.current === 'processing' && endTurnArmedRef.current) {
+      processRecordedUtterance();
+      return;
+    }
     setPhase('idle');
     phaseRef.current = 'idle';
     if (autoRecordRef.current) {
@@ -199,17 +284,28 @@ export function FaceToFaceScreen({ route, navigation }: any) {
 
   const startRecording = () => {
     if (phaseRef.current !== 'idle') return;
+    // Reset per-turn state.
+    recordedUriRef.current = null;
+    finalTextRef.current = '';
+    hadSpeechRef.current = false;
+    endTurnArmedRef.current = false;
+    lastVoiceTsRef.current = Date.now();
+    speechStartTsRef.current = Date.now();
     try {
-      const currentLangInfo = useLocaleARef.current ? langAInfo : langBInfo;
-      const locale = currentLangInfo
-        ? `${currentLangInfo.code}-${currentLangInfo.countryCode}`
-        : 'en-US';
-      // Per-utterance: the recognizer stops on its own when the speaker pauses,
-      // emitting a final result + 'end', which drives the next listen cleanly.
       ExpoSpeechRecognitionModule.start({
-        lang: locale,
+        // Seed locale drives the on-device LIVE CAPTION only. Whisper re-does the
+        // transcription with auto language detection, so this never forces the
+        // actual translation toward one language.
+        lang: seedLocaleRef.current,
         interimResults: true,
-        continuous: false,
+        // We control endpointing via the silence timer, so keep the recognizer
+        // open through pauses instead of letting the OS cut on the first breath.
+        continuous: true,
+        addsPunctuation: true,
+        contextualStrings: buildContextualStrings(),
+        iosTaskHint: 'dictation',
+        // Persist each turn's audio to a file for Whisper.
+        recordingOptions: { persist: true },
         volumeChangeEventOptions: { enabled: true, intervalMillis: 100 },
       });
       setPhase('recording');
@@ -228,33 +324,60 @@ export function FaceToFaceScreen({ route, navigation }: any) {
       startRecording();
       return;
     }
-    // Pause: disable auto-restart, then ask the recognizer to finalize (stop,
-    // not abort — stop returns a final result so we can translate the utterance).
-    // If no final result arrives (device quirk), fall back to the last interim
-    // transcript captured at tap time.
+    // Pause: stop auto-restart. If something was said, finalize & translate it;
+    // otherwise just go idle.
     autoRecordRef.current = false;
-    const fallback = voicePartialRef.current;
-    try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
-
-    setTimeout(() => {
-      if (phaseRef.current === 'processing') return; // final result already handled it
-      voicePartialRef.current = '';
-      setVoicePartial('');
+    if (hadSpeechRef.current || voicePartialRef.current.trim()) {
+      armEndTurn();
+    } else {
+      try { ExpoSpeechRecognitionModule.abort(); } catch { /* ignore */ }
       stopWaveform();
-      if (fallback.trim()) {
-        setPhase('processing');
-        phaseRef.current = 'processing';
-        handleTranslateAndSend(fallback);
-      } else {
-        setPhase('idle');
-        phaseRef.current = 'idle';
-      }
-    }, 700);
+      setPhase('idle');
+      phaseRef.current = 'idle';
+    }
   };
 
-  // ── Translate & send ───────────────────────────────────────────────────────
+  // ── Process recorded turn: Whisper → translate → send ───────────────────────
 
-  const handleTranslateAndSend = async (transcript: string) => {
+  const processRecordedUtterance = async () => {
+    const uri = recordedUriRef.current;
+    const history = buildHistory();
+    let transcript = finalTextRef.current.trim() || voicePartialRef.current.trim();
+    let acousticHint = '';
+
+    // Whisper is the authoritative, language-agnostic transcript. Passing recent
+    // conversation context as the prompt repairs cut-off words and biases names.
+    if (uri) {
+      try {
+        const ext = uri.endsWith('.wav') ? 'wav' : uri.endsWith('.caf') ? 'caf' : 'm4a';
+        const w = await transcribeAudio(uri, { prompt: history, ext });
+        if (w.text.trim()) {
+          transcript = w.text.trim();
+          acousticHint = w.language;
+        }
+      } catch (err) {
+        console.warn('[FaceToFace] Whisper failed, using native transcript:', err);
+      }
+    }
+
+    if (!transcript) {
+      // Nothing usable — unwind and resume listening.
+      setPhase('idle');
+      phaseRef.current = 'idle';
+      if (autoRecordRef.current) {
+        setTimeout(() => { if (autoRecordRef.current) startRecording(); }, 300);
+      }
+      return;
+    }
+
+    await finalizeAndSend(transcript, history, acousticHint);
+  };
+
+  const finalizeAndSend = async (
+    transcript: string,
+    history: string,
+    acousticHint: string,
+  ) => {
     const msgCount = conversation?.messageCount ?? messages.length;
     const cost = getMessageCost(msgCount);
     if (userPoints < cost) {
@@ -266,7 +389,15 @@ export function FaceToFaceScreen({ route, navigation }: any) {
 
     setSending(true);
     try {
-      const { translated, sourceLang, targetLang } = await translateAutoDetect(transcript, langA, langB);
+      // GPT understands the (possibly code-mixed) utterance with context, decides
+      // direction, and translates — no rigid source-language classification.
+      const { translated, sourceLang, targetLang } = await translateAutoDetect(
+        transcript, langA, langB, { history, acousticHint },
+      );
+      // Sharpen the next live caption toward whoever just spoke.
+      const spokenInfo = getLanguageByCode(sourceLang);
+      if (spokenInfo) seedLocaleRef.current = `${spokenInfo.code}-${spokenInfo.countryCode}`;
+
       const ok = await deductPoints(user!.uid, cost, 'message', conversationId);
       if (ok) setUserPoints((p) => Math.max(0, p - cost));
 
@@ -283,8 +414,6 @@ export function FaceToFaceScreen({ route, navigation }: any) {
       setSending(false);
       setPhase('idle');
       phaseRef.current = 'idle';
-      // Alternate locale for next speaker
-      useLocaleARef.current = !useLocaleARef.current;
       if (autoRecordRef.current) {
         setTimeout(() => { if (autoRecordRef.current) startRecording(); }, 400);
       }

@@ -31,6 +31,7 @@ import {
   type Conversation,
 } from '../../services/firestore';
 import { translateText } from '../../services/translation';
+import { transcribeAudio } from '../../services/whisper';
 import { checkSpelling, applyCorrection, type SpellMatch } from '../../services/spellcheck';
 import { sendPushNotification } from '../../services/notifications';
 import { isSameDay, formatDateLabel } from '../../utils/date';
@@ -87,6 +88,25 @@ export function ConversationScreen({ route, navigation }: any) {
   const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
   const myLanguageRef = useRef('en');
   const sessionMsgCountRef = useRef(0);
+
+  // ── Hybrid speech refs ───────────────────────────────────────────────────────
+  // Native recognizer drives the instant live draft + records each turn to a
+  // file; the file goes to Whisper for an accurate, code-mix-tolerant transcript.
+  // We control end-of-turn with a silence timer so a breath no longer cuts the
+  // sentence short.
+  const recordedUriRef = useRef<string | null>(null);
+  const finalTextRef = useRef('');
+  const hadSpeechRef = useRef(false);
+  const lastVoiceTsRef = useRef(0);
+  const speechStartTsRef = useRef(0);
+  const endTurnArmedRef = useRef(false);
+  const isRecordingRef = useRef(false);
+  const messagesRef = useRef<Message[]>([]);
+  const otherLanguageRef = useRef('en');
+
+  const SILENCE_MS = 1400;   // silence after speech before we finalize the turn
+  const MIN_SPEECH_MS = 500; // ignore sub-half-second blips
+  const VOICE_LEVEL = 0;     // volumechange value above this counts as audible
   const insets = useSafeAreaInsets();
   const { showAd: showInterstitial } = useInterstitialAd();
   const { showAd: showRewardedAd } = useRewardedAd();
@@ -125,6 +145,9 @@ export function ConversationScreen({ route, navigation }: any) {
   }, []);
 
   useEffect(() => { myLanguageRef.current = myLanguage; }, [myLanguage]);
+  useEffect(() => { otherLanguageRef.current = otherLanguage; }, [otherLanguage]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
 
   useEffect(() => {
     if (conversation?.status !== 'active') return;
@@ -135,32 +158,56 @@ export function ConversationScreen({ route, navigation }: any) {
     return () => {
       clearTimeout(timer);
       autoRecordRef.current = false;
-      try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
+      endTurnArmedRef.current = false; // don't let a mid-turn teardown hit Whisper
+      try { ExpoSpeechRecognitionModule.abort(); } catch { /* ignore */ }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversation?.status]);
 
+  // Recent conversation lines as grounding context for Whisper (repairs cut-off
+  // words, biases names) — the biggest accuracy lever for short utterances.
+  const buildHistory = (): string =>
+    messagesRef.current
+      .slice(-4)
+      .map((m) => m.originalText)
+      .filter(Boolean)
+      .join('\n');
+
+  const buildContextualStrings = (): string[] => {
+    const words = messagesRef.current
+      .slice(-4)
+      .flatMap((m) => m.originalText.split(/\s+/))
+      .filter((w) => w.length > 3 && /[A-Z]/.test(w[0]));
+    return Array.from(new Set(words)).slice(0, 20);
+  };
+
+  // Single guarded end-of-turn: stop the recognizer so it flushes the recorded
+  // audio file + final transcript; 'end' then hands the audio to Whisper.
+  const armEndTurn = () => {
+    if (endTurnArmedRef.current) return;
+    endTurnArmedRef.current = true;
+    try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
+  };
+
+  useSpeechRecognitionEvent('audiostart', (e) => {
+    recordedUriRef.current = e.uri ?? null;
+  });
+  useSpeechRecognitionEvent('audioend', (e) => {
+    if (e.uri) recordedUriRef.current = e.uri;
+  });
+
   useSpeechRecognitionEvent('result', (e) => {
     const text = e.results[0]?.transcript ?? '';
+    if (text.trim()) hadSpeechRef.current = true;
     if (e.isFinal) {
-      if (text) {
-        setInputText(text);
-        handleTextChange(text);
-        const detected = detectScript(text);
-        const base = myLanguageRef.current.split('-')[0].split('_')[0];
-        if (detected && detected !== base && detected !== 'en') {
-          setLangMismatch(true);
-          setTimeout(() => setLangMismatch(false), 3500);
-        }
-      }
-      setIsRecording(false);
+      finalTextRef.current = text;
+      // Instant draft: show the native transcript right away; Whisper upgrades it
+      // a moment later in processRecordedUtterance.
+      if (text) { setInputText(text); handleTextChange(text); }
       setVoicePartial('');
-      // Auto-restart for continuous recording
-      if (autoRecordRef.current) {
-        setTimeout(() => {
-          if (autoRecordRef.current) startRecording();
-        }, 400);
-      }
+      // Auto-stop devices (Android ≤12, iOS 17-) end the turn here without our
+      // stop() — arm so the audio still reaches Whisper via 'end'.
+      if (text.trim()) armEndTurn();
     } else {
       setVoicePartial(text);
     }
@@ -170,6 +217,24 @@ export function ConversationScreen({ route, navigation }: any) {
     const vol = e.value;
     const scale = vol < 0 ? 1 : 1 + Math.min(vol / 10, 1) * 0.45;
     Animated.timing(pulseAnim, { toValue: scale, duration: 80, useNativeDriver: true }).start();
+
+    // Silence-based endpointing — finalize only after a real pause, so a
+    // mid-sentence breath no longer triggers a premature send.
+    if (!isRecordingRef.current || endTurnArmedRef.current) return;
+    const now = Date.now();
+    if (vol > VOICE_LEVEL) {
+      lastVoiceTsRef.current = now;
+      if (!hadSpeechRef.current) {
+        hadSpeechRef.current = true;
+        speechStartTsRef.current = now;
+      }
+    } else if (
+      hadSpeechRef.current &&
+      now - lastVoiceTsRef.current > SILENCE_MS &&
+      now - speechStartTsRef.current > MIN_SPEECH_MS
+    ) {
+      armEndTurn();
+    }
   });
 
   useSpeechRecognitionEvent('error', () => {
@@ -179,10 +244,30 @@ export function ConversationScreen({ route, navigation }: any) {
     setVoicePartial('');
   });
 
+  // Session fully stopped. If we armed an end-of-turn, the recorded audio is
+  // flushed — hand it to Whisper; otherwise idle/restart.
+  useSpeechRecognitionEvent('end', () => {
+    setIsRecording(false);
+    if (endTurnArmedRef.current) {
+      processRecordedUtterance();
+      return;
+    }
+    if (autoRecordRef.current) {
+      setTimeout(() => { if (autoRecordRef.current) startRecording(); }, 400);
+    }
+  });
+
   const startRecording = async () => {
     try {
       const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!granted) return;
+      // Reset per-turn state.
+      recordedUriRef.current = null;
+      finalTextRef.current = '';
+      hadSpeechRef.current = false;
+      endTurnArmedRef.current = false;
+      lastVoiceTsRef.current = Date.now();
+      speechStartTsRef.current = Date.now();
       setVoicePartial('');
       setIsRecording(true);
       const lang = getLanguageByCode(myLanguageRef.current);
@@ -190,6 +275,13 @@ export function ConversationScreen({ route, navigation }: any) {
       ExpoSpeechRecognitionModule.start({
         lang: locale,
         interimResults: true,
+        // We control endpointing via the silence timer, so keep listening
+        // through pauses instead of cutting on the first breath.
+        continuous: true,
+        addsPunctuation: true,
+        contextualStrings: buildContextualStrings(),
+        iosTaskHint: 'dictation',
+        recordingOptions: { persist: true },
         volumeChangeEventOptions: { enabled: true, intervalMillis: 100 },
       });
     } catch {
@@ -199,22 +291,63 @@ export function ConversationScreen({ route, navigation }: any) {
     }
   };
 
+  // Whisper re-transcribes the recorded turn for accuracy + code-mix tolerance,
+  // then we refresh the draft and resume listening.
+  const processRecordedUtterance = async () => {
+    const uri = recordedUriRef.current;
+    const history = buildHistory();
+    let transcript = finalTextRef.current.trim() || voicePartial.trim();
+
+    if (uri) {
+      try {
+        const ext = uri.endsWith('.wav') ? 'wav' : uri.endsWith('.caf') ? 'caf' : 'm4a';
+        const w = await transcribeAudio(uri, { prompt: history, ext });
+        if (w.text.trim()) transcript = w.text.trim();
+      } catch (err) {
+        console.warn('[Conversation] Whisper failed, using native transcript:', err);
+      }
+    }
+
+    if (transcript) {
+      setInputText(transcript);
+      handleTextChange(transcript);
+      const detected = detectScript(transcript);
+      const base = myLanguageRef.current.split('-')[0].split('_')[0];
+      if (detected && detected !== base && detected !== 'en') {
+        setLangMismatch(true);
+        setTimeout(() => setLangMismatch(false), 3500);
+      }
+    }
+    endTurnArmedRef.current = false;
+    if (autoRecordRef.current) {
+      setTimeout(() => { if (autoRecordRef.current) startRecording(); }, 400);
+    }
+  };
+
   const pauseRecording = () => {
+    // Pause = stop the continuous loop. If something was said, finalize it (so
+    // the spoken draft is captured via Whisper); otherwise just halt. Either way
+    // autoRecordRef is off so we don't auto-resume — tapping mic again resumes.
+    autoRecordRef.current = false;
     pulseLoop.current?.stop();
     pulseAnim.setValue(1);
-    setIsRecording(false);
-    setVoicePartial('');
-    try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
-    // Keep autoRecordRef.current — tapping mic again resumes
+    if (hadSpeechRef.current || voicePartial.trim()) {
+      armEndTurn();
+    } else {
+      try { ExpoSpeechRecognitionModule.abort(); } catch { /* ignore */ }
+      setIsRecording(false);
+      setVoicePartial('');
+    }
   };
 
   const stopRecording = async () => {
     autoRecordRef.current = false;
+    endTurnArmedRef.current = false;
     pulseLoop.current?.stop();
     pulseAnim.setValue(1);
     setIsRecording(false);
     setVoicePartial('');
-    try { ExpoSpeechRecognitionModule.stop(); } catch { /* ignore */ }
+    try { ExpoSpeechRecognitionModule.abort(); } catch { /* ignore */ }
   };
 
   const resumeContinuousRecording = () => {

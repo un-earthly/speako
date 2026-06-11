@@ -52,17 +52,67 @@ export async function translateWithAI(
   }
 }
 
-// Single-call language detection + translation using GPT.
-// Returns the translated text AND which language was detected as the source.
+export type DetectTranslateContext = {
+  /**
+   * Recent conversation lines (most recent last) to ground the model in topic,
+   * names, and each speaker's way of talking. Plain text, newline-separated.
+   */
+  history?: string;
+  /**
+   * A soft hint from acoustic detection (e.g. Whisper's detected language name).
+   * Treated as a clue, NOT a rule — the model may override it, which is what we
+   * want for code-mixed speech.
+   */
+  acousticHint?: string;
+};
+
+// Single-call understanding + translation using GPT.
+//
+// This intentionally does NOT force the input into a single clean language.
+// Real speakers code-mix (Banglish, Hinglish, Arabic-English, Spanglish, …),
+// so we hand the model the raw utterance plus conversation context and let it
+// reason about the *intended meaning* and which participant most likely spoke.
+// We only resolve a directional label (A or B) for the UI; the comprehension
+// itself stays unconstrained.
 export async function detectAndTranslate(
   text: string,
   langA: string,
   langB: string,
   langAName: string,
   langBName: string,
+  context: DetectTranslateContext = {},
 ): Promise<{ translated: string; sourceLang: string; targetLang: string } | null> {
   if (!OPENAI_API_KEY) return null;
   try {
+    const system = `You are Speako AI, a real-time interpreter sitting between two people in a live conversation:
+- Person A speaks ${langAName} (code: "${langA}").
+- Person B speaks ${langBName} (code: "${langB}").
+
+Your job: understand what was just said, then produce a clean translation for the OTHER person to read.
+
+How real speech works — read carefully:
+- Speakers frequently MIX languages within one utterance (e.g. Banglish = Bengali + English, Hinglish, Arabic + English, Spanglish). A sentence may be mostly one language with foreign words, names, or whole phrases dropped in.
+- Speech-to-text is imperfect: words may be cut off, misheard, or run together. Use meaning and the conversation context to repair obvious errors before translating.
+- Do not translate word-for-word. Capture the intent, tone, and register; adapt idioms and slang naturally.
+- Keep names, brands, URLs, code, hashtags, numbers, and untranslatable technical terms intact.
+
+Deciding direction:
+- Figure out which person most likely spoke this, based on the DOMINANT language of intent (not just a few borrowed words) and the conversation context. That person is the source; translate INTO the other person's language so their counterpart understands.
+- A code-mixed utterance still has one intended audience — translate the COMPLETE meaning into the target language, leaving no foreign-script or mixed fragments untranslated.
+${context.acousticHint ? `- Acoustic detection guessed the audio sounded like: "${context.acousticHint}". Treat this only as a weak hint; override it if the words and context say otherwise.\n` : ''}
+Respond with ONLY valid JSON in this exact shape:
+{"sourceLang":"<"${langA}" or "${langB}" — whichever person spoke>","translated":"<full natural translation in the OTHER person's language>"}
+
+Rules:
+- "sourceLang" must be exactly "${langA}" or "${langB}".
+- "translated" must be the full, natural translation — no quotes, no notes, no leftover source-language fragments.`;
+
+    const userParts: string[] = [];
+    if (context.history?.trim()) {
+      userParts.push(`Recent conversation (for context only, do not translate this):\n${context.history.trim()}`);
+    }
+    userParts.push(`Utterance to translate:\n${text}`);
+
     const res = await fetch(BASE_URL, {
       method: 'POST',
       headers: {
@@ -73,21 +123,11 @@ export async function detectAndTranslate(
         model: MODEL,
         response_format: { type: 'json_object' },
         messages: [
-          {
-            role: 'system',
-            content: `You are a translation engine. Determine whether the text is in ${langAName} (code: "${langA}") or ${langBName} (code: "${langB}"), then translate it to the other language.
-
-Respond with ONLY valid JSON in this exact shape:
-{"sourceLang":"<detected code>","translated":"<translation>"}
-
-Rules:
-- "sourceLang" must be exactly "${langA}" or "${langB}".
-- "translated" must be the full, natural translation — no quotes, no explanations.`,
-          },
-          { role: 'user', content: text },
+          { role: 'system', content: system },
+          { role: 'user', content: userParts.join('\n\n') },
         ],
         temperature: 0.1,
-        max_tokens: 512,
+        max_tokens: 700,
       }),
     });
 
