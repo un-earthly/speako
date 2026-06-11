@@ -32,6 +32,9 @@ import {
 } from '../../services/firestore';
 import { translateAutoDetect } from '../../services/translation';
 import { transcribeAudio } from '../../services/whisper';
+import { RealtimeTranscriber } from '../../services/realtime-stt';
+import { LiveTranslator } from '../../services/live-translate';
+import { LiveCaption } from '../../components/conversation/LiveCaption';
 import { isSameDay, formatDateLabel } from '../../utils/date';
 import { getMessageCost } from '../../utils/points';
 import { POINTS, deductPoints, getUserPoints, rewardAdWatch } from '../../services/rewards';
@@ -56,6 +59,7 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   const [sending, setSending] = useState(false);
   const [phase, setPhase] = useState<Phase>('idle');
   const [voicePartial, setVoicePartial] = useState('');
+  const [livePreview, setLivePreview] = useState(''); // live translation, edits in realtime
   const [inputMode, setInputMode] = useState<'voice' | 'keyboard'>('voice');
   const [translationPreview, setTranslationPreview] = useState('');
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -98,7 +102,20 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   );
   const messagesRef = useRef<Message[]>([]);
 
-  // End-of-turn tuning.
+  // ── Realtime streaming (primary) ─────────────────────────────────────────────
+  // OpenAI Realtime keeps one socket open for the whole conversation: continuous
+  // audio in, live transcript deltas out, auto language detection. No per-turn
+  // stop/upload, works identically on iOS + Android. The Whisper hybrid above
+  // stays as the fallback if streaming can't start (e.g. native audio module
+  // missing or key error).
+  const REALTIME_ENABLED = true;
+  const AUTO_SPEAK = true; // speak the translation aloud, like Google's mode
+  const realtimeRef = useRef(REALTIME_ENABLED); // flips false on fallback
+  const transcriberRef = useRef<RealtimeTranscriber | null>(null);
+  const liveTranslatorRef = useRef<LiveTranslator | null>(null);
+  const waveTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // End-of-turn tuning (native fallback path only).
   const SILENCE_MS = 1400;   // silence after speech before we finalize the turn
   const MIN_SPEECH_MS = 500; // ignore sub-half-second blips (coughs, taps)
   const VOICE_LEVEL = 0;     // volumechange value above this counts as audible
@@ -112,9 +129,24 @@ export function FaceToFaceScreen({ route, navigation }: any) {
   // ── Waveform (driven by volumechange) ─────────────────────────────────────
 
   const stopWaveform = useCallback(() => {
+    if (waveTimer.current) { clearInterval(waveTimer.current); waveTimer.current = null; }
     waveformBars.forEach((bar) =>
       Animated.timing(bar, { toValue: 0.25, duration: 120, useNativeDriver: true }).start()
     );
+  }, [waveformBars]);
+
+  // Realtime has no volume events, so animate the waveform while speech is active.
+  const startWaveformPulse = useCallback(() => {
+    if (waveTimer.current) return;
+    waveTimer.current = setInterval(() => {
+      waveformBars.forEach((bar) =>
+        Animated.timing(bar, {
+          toValue: 0.2 + Math.random() * 0.8,
+          duration: 140,
+          useNativeDriver: true,
+        }).start()
+      );
+    }, 150);
   }, [waveformBars]);
 
   // ── Firestore subscriptions ────────────────────────────────────────────────
@@ -150,7 +182,8 @@ export function FaceToFaceScreen({ route, navigation }: any) {
       .then(({ granted }) => {
         if (!granted) { showToast('Microphone permission required', 'error'); return; }
         const timer = setTimeout(() => {
-          if (autoRecordRef.current) startRecording();
+          if (realtimeRef.current) startStreaming();
+          else if (autoRecordRef.current) startRecording();
         }, 500);
         return () => clearTimeout(timer);
       })
@@ -158,7 +191,9 @@ export function FaceToFaceScreen({ route, navigation }: any) {
 
     return () => {
       autoRecordRef.current = false;
+      try { transcriberRef.current?.stop(); } catch { /* ignore */ }
       try { ExpoSpeechRecognitionModule.abort(); } catch { /* ignore */ }
+      if (waveTimer.current) clearInterval(waveTimer.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -174,6 +209,115 @@ export function FaceToFaceScreen({ route, navigation }: any) {
         return `${name}: ${m.originalText}`;
       })
       .join('\n');
+  };
+
+  // ── Realtime streaming pipeline ──────────────────────────────────────────────
+
+  const startStreaming = () => {
+    if (transcriberRef.current?.active) return;
+
+    // The live translator runs concurrently with listening: it translates the
+    // rolling partial as the person speaks, debounced + stale-guarded, and
+    // pushes updates into the second caption.
+    const lt = new LiveTranslator();
+    lt.configure(langA, langB, (translated) => setLivePreview(translated));
+    liveTranslatorRef.current = lt;
+
+    const t = new RealtimeTranscriber();
+    transcriberRef.current = t;
+    t.start({
+      onOpen: () => { setPhase('recording'); phaseRef.current = 'recording'; },
+      onSpeechStart: () => {
+        setPhase('recording'); phaseRef.current = 'recording';
+        startWaveformPulse();
+        // New utterance — drop the previous live translation + direction lock.
+        lt.reset();
+        setLivePreview('');
+      },
+      onSpeechStop: () => { stopWaveform(); },
+      // Two things in parallel: paint the source caption instantly, AND kick the
+      // live translation (fire-and-forget — never awaited, never blocks audio).
+      onPartial: (txt) => {
+        setVoicePartial(txt);
+        lt.feed(txt);
+      },
+      // Finished utterance: clear the live captions and hand off the authoritative
+      // translate + send + speak to the background. The socket keeps streaming
+      // the next utterance immediately — no stop, no await on the hot path.
+      onSegment: (txt) => {
+        setVoicePartial('');
+        setLivePreview('');
+        lt.reset();
+        void commitSegment(txt);
+      },
+      onError: (m) => {
+        console.warn('[Realtime] error, falling back to standard mode:', m);
+        fallbackToHybrid();
+      },
+      onClose: () => {
+        stopWaveform();
+        if (phaseRef.current !== 'processing') { setPhase('idle'); phaseRef.current = 'idle'; }
+      },
+    });
+  };
+
+  const stopStreaming = () => {
+    try { transcriberRef.current?.stop(); } catch { /* ignore */ }
+    transcriberRef.current = null;
+    liveTranslatorRef.current?.reset();
+    liveTranslatorRef.current = null;
+    setLivePreview('');
+    stopWaveform();
+  };
+
+  // If realtime can't run (missing native module / key), drop to the Whisper
+  // hybrid so voice still works.
+  const fallbackToHybrid = () => {
+    realtimeRef.current = false;
+    stopStreaming();
+    showToast('Live mode unavailable — using standard mode', 'error');
+    setPhase('idle'); phaseRef.current = 'idle';
+    autoRecordRef.current = true;
+    setTimeout(() => { if (autoRecordRef.current) startRecording(); }, 300);
+  };
+
+  // Commit one finalized utterance in the BACKGROUND: authoritative (context-
+  // aware) translate, points, Firestore write, and auto-TTS — all without
+  // touching the recording lifecycle, so the stream keeps listening/translating
+  // the next utterance in parallel.
+  const commitSegment = async (raw: string) => {
+    const transcript = raw.trim();
+    if (!transcript) return;
+    const msgCount = conversation?.messageCount ?? messages.length;
+    const cost = getMessageCost(msgCount);
+    if (userPoints < cost) { setShowPointsBanner(true); return; }
+
+    try {
+      const history = buildHistory();
+      const { translated, sourceLang, targetLang } = await translateAutoDetect(
+        transcript, langA, langB, { history },
+      );
+      // Fire the rest in the background — don't await on the hot path.
+      deductPoints(user!.uid, cost, 'message', conversationId)
+        .then((ok) => { if (ok) setUserPoints((p) => Math.max(0, p - cost)); })
+        .catch((err) => console.error('Points deduct failed:', err));
+
+      addOptimisticMessage(transcript, translated, sourceLang, targetLang, 'voice');
+      sendMessage(conversationId, user!.uid, transcript, translated, sourceLang, targetLang, 'voice')
+        .catch((err) => console.error('Firestore send failed:', err));
+
+      // Speak the translation aloud, like Google's conversation mode. Fire-and-
+      // forget so it never blocks the next utterance.
+      if (AUTO_SPEAK && translated && translated !== transcript) {
+        speakText(translated).catch(() => { /* ignore */ });
+      }
+
+      sessionMsgCountRef.current += 1;
+      if (sessionMsgCountRef.current % 10 === 0) showInterstitial();
+    } catch (err: any) {
+      console.error('[FaceToFace] streamed translate failed:', err);
+      showToast(err.message || 'Translation failed', 'error');
+    }
   };
 
   // Salient terms (names, brands, rare words) to bias the on-device live caption.
@@ -319,6 +463,19 @@ export function FaceToFaceScreen({ route, navigation }: any) {
 
   const handleTap = () => {
     if (phase === 'processing') return;
+
+    // Realtime path: tap toggles the live session on/off.
+    if (realtimeRef.current) {
+      if (transcriberRef.current?.active) {
+        stopStreaming();
+        setVoicePartial('');
+        setPhase('idle'); phaseRef.current = 'idle';
+      } else {
+        startStreaming();
+      }
+      return;
+    }
+
     if (phase === 'idle') {
       autoRecordRef.current = true;
       startRecording();
@@ -730,14 +887,16 @@ export function FaceToFaceScreen({ route, navigation }: any) {
               <TouchableOpacity
                 style={styles.modeToggle}
                 onPress={() => {
-                  if (phase === 'recording') {
+                  if (realtimeRef.current) {
+                    stopStreaming();
+                  } else if (phase === 'recording') {
                     try { ExpoSpeechRecognitionModule.abort(); } catch { /* ignore */ }
-                    stopWaveform();
-                    setVoicePartial('');
-                    setPhase('idle');
-                    phaseRef.current = 'idle';
                     autoRecordRef.current = false;
                   }
+                  stopWaveform();
+                  setVoicePartial('');
+                  setPhase('idle');
+                  phaseRef.current = 'idle';
                   setInputMode('keyboard');
                 }}
               >
@@ -745,12 +904,20 @@ export function FaceToFaceScreen({ route, navigation }: any) {
               </TouchableOpacity>
 
               <View style={styles.micCenter}>
-                {/* Live partial transcript */}
-                {voicePartial ? (
-                  <Text style={[styles.partialText, { color: colors.textSecondary }]} numberOfLines={2}>
-                    {voicePartial}
-                  </Text>
-                ) : null}
+                {/* Source transcript (top) and live translation (below) — both
+                    rewrite themselves in realtime, in parallel. */}
+                <LiveCaption
+                  text={voicePartial}
+                  color={colors.textSecondary}
+                  tailColor={colors.textSecondary}
+                  size={13}
+                />
+                <LiveCaption
+                  text={livePreview}
+                  color={isDark ? '#5AC8FA' : '#007AFF'}
+                  tailColor={isDark ? 'rgba(90,200,250,0.55)' : 'rgba(0,122,255,0.55)'}
+                  size={16}
+                />
 
                 <TouchableOpacity onPress={handleTap} disabled={phase === 'processing'} activeOpacity={0.8}>
                   <View style={[
@@ -766,7 +933,11 @@ export function FaceToFaceScreen({ route, navigation }: any) {
                   </View>
                 </TouchableOpacity>
                 <Text style={[styles.micLabel, { color: colors.textSecondary }]}>
-                  {phase === 'idle' ? 'Tap to speak' : phase === 'recording' ? 'Pause' : 'Translating…'}
+                  {phase === 'processing'
+                    ? 'Translating…'
+                    : phase === 'recording'
+                      ? (realtimeRef.current ? 'Listening — tap to pause' : 'Pause')
+                      : 'Tap to speak'}
                 </Text>
               </View>
 
@@ -774,7 +945,13 @@ export function FaceToFaceScreen({ route, navigation }: any) {
             </View>
           ) : (
             <View style={styles.keyboardRow}>
-              <TouchableOpacity onPress={() => { setInputText(''); setTranslationPreview(''); setInputMode('voice'); }}>
+              <TouchableOpacity onPress={() => {
+                setInputText('');
+                setTranslationPreview('');
+                setInputMode('voice');
+                if (realtimeRef.current) startStreaming();
+                else { autoRecordRef.current = true; setTimeout(() => startRecording(), 200); }
+              }}>
                 <View style={[styles.actionBtn2, { backgroundColor: colors.surface }]}>
                   <Ionicons name="mic" size={20} color={colors.textSecondary} />
                 </View>

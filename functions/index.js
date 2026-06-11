@@ -10,6 +10,7 @@ initializeApp();
 
 const gmailUser = defineString('GMAIL_USER');
 const gmailPass = defineString('GMAIL_APP_PASSWORD');
+const openaiKey = defineString('OPENAI_API_KEY');
 
 // Salt prevents rainbow-table attacks on stored OTP hashes
 const HASH_SALT = 'speako-otp-v1';
@@ -73,6 +74,47 @@ exports.sendOTP = onCall({ region: 'us-central1' }, async (request) => {
   });
 
   return { success: true };
+});
+
+// Mint a short-lived ephemeral token for the OpenAI Realtime API so the real
+// OpenAI key never ships in the app. The device uses the returned token as the
+// WebSocket Bearer; it expires in ~60s, after which a new one is minted.
+exports.mintRealtimeToken = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in required.');
+  }
+
+  const res = await fetch('https://api.openai.com/v1/realtime/transcription_sessions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${openaiKey.value()}`,
+      'Content-Type': 'application/json',
+      'OpenAI-Beta': 'realtime=v1',
+    },
+    body: JSON.stringify({
+      input_audio_format: 'pcm16',
+      input_audio_transcription: { model: 'gpt-4o-transcribe' },
+      turn_detection: {
+        type: 'server_vad',
+        threshold: 0.5,
+        prefix_padding_ms: 300,
+        silence_duration_ms: 600,
+      },
+      input_audio_noise_reduction: { type: 'near_field' },
+    }),
+  });
+
+  if (!res.ok) {
+    const msg = await res.text();
+    throw new HttpsError('internal', `OpenAI session error ${res.status}: ${msg}`);
+  }
+
+  const data = await res.json();
+  const value = data && data.client_secret && data.client_secret.value;
+  if (!value) {
+    throw new HttpsError('internal', 'No client_secret returned by OpenAI.');
+  }
+  return { token: value, expiresAt: data.client_secret.expires_at };
 });
 
 exports.verifyOTP = onCall({ region: 'us-central1' }, async (request) => {
